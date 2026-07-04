@@ -5,26 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#000000">
 <title>WEAVER — sequencer</title>
-<meta name="description" content="Minimal browser groovebox: house / techno / edm / dnb. 100% procedural Web Audio synthesis. No samples.">
+<meta name="description" content="Minimal browser groovebox: house / deep techno / techno / edm / dnb. Auto-DJ mode, 100% procedural Web Audio synthesis, load your own audio.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Crect x='6' y='6' width='4' height='4' fill='%2300ff41'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header id="top">
-  <div id="brand">WEAVER<span class="dim">/SEQ.01</span></div>
-  <div class="hgroup" id="transport">
+  <div class="hrow">
+    <div id="brand">WEAVER<span class="dim">/SEQ.02</span></div>
     <button id="play" title="space">&#9654;</button>
-    <label class="num">BPM<input id="bpm" type="number" min="60" max="200" step="1" value="124"></label>
-    <label class="num">SWG<input id="swing" type="number" min="50" max="75" step="1" value="50"></label>
-  </div>
-  <div class="hgroup" id="presets"></div>
-  <div class="hgroup" id="tools">
+    <button id="auto" title="self-mixing dj set">AUTO</button>
+    <span id="autostat"></span>
+    <div id="presets"></div>
+    <span class="spacer"></span>
     <button id="clear" title="clear all steps">CLR</button>
     <button id="random" title="random pattern">RND</button>
     <button id="share" title="copy link with current state">URL</button>
-    <label class="sl wide">PMP<input id="pump" type="range" min="0" max="1" step="0.01"></label>
-    <label class="sl wide">OUT<input id="master" type="range" min="0" max="1" step="0.01"></label>
+  </div>
+  <div class="hrow" id="masters">
+    <label class="bigsl"><span class="t">BPM</span><input id="bpm" type="range" min="60" max="200" step="1"><output id="bpm-v"></output></label>
+    <label class="bigsl"><span class="t">SWG</span><input id="swing" type="range" min="50" max="75" step="1"><output id="swing-v"></output></label>
+    <label class="bigsl flt" title="dj filter: left LP / right HP / double-click reset"><span class="t">FLT</span><input id="filter" type="range" min="-1" max="1" step="0.01"><output id="filter-v"></output></label>
+    <label class="bigsl"><span class="t">PMP</span><input id="pump" type="range" min="0" max="1" step="0.01"><output id="pump-v"></output></label>
+    <label class="bigsl"><span class="t">OUT</span><input id="master" type="range" min="0" max="1" step="0.01"><output id="master-v"></output></label>
   </div>
 </header>
 
@@ -36,10 +40,16 @@
   <div id="grid"></div>
 </main>
 
+<div id="wallwrap">
+  <canvas id="wall"></canvas>
+</div>
+
 <footer>
-  <span>CLICK&thinsp;=&thinsp;STEP &middot; SHIFT+CLICK&thinsp;=&thinsp;ACCENT &middot; DRAG BS CELL&thinsp;=&thinsp;PITCH &middot; SPACE&thinsp;=&thinsp;RUN &middot; 1&ndash;4&thinsp;=&thinsp;PRESET</span>
-  <span class="dim">100% PROCEDURAL SYNTHESIS &middot; WEB AUDIO &middot; NO SAMPLES</span>
+  <span>CLICK&thinsp;=&thinsp;STEP &middot; SHIFT+CLICK&thinsp;=&thinsp;ACCENT &middot; DRAG BS/SP CELL&thinsp;=&thinsp;PITCH/SLICE &middot; SPACE&thinsp;=&thinsp;RUN &middot; 1&ndash;5&thinsp;=&thinsp;PRESET &middot; A&thinsp;=&thinsp;AUTO</span>
+  <span class="dim">100% PROCEDURAL SYNTHESIS &middot; WEB AUDIO &middot; DROP AN AUDIO FILE FOR THE SP TRACK</span>
 </footer>
+
+<input id="file" type="file" accept="audio/*" hidden>
 
 <script type="module" src="js/main.js"></script>
 </body>

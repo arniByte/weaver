@@ -157,8 +157,13 @@ export function hat(ctx, out, t, p, vel, open) {
 
 const ROOT_BASS = 55;   // A1
 
-export function bass(ctx, out, t, p, vel, note, stepDur) {
+// mode 0 ACD: resonant acid saw+sub · 1 DEP: saturated deep-techno sub ·
+// 2 RSE: detuned reese. Returns the amp gain so the engine can run a mono choke.
+export function bass(ctx, out, t, p, vel, note, stepDur, mode = 0) {
   const f = ROOT_BASS * Math.pow(2, note / 12);
+  if (mode === 1) return bassDeep(ctx, out, t, p, vel, f, stepDur);
+  if (mode === 2) return bassReese(ctx, out, t, p, vel, f, stepDur);
+
   const gate = stepDur * (0.55 + p.decay * 2.2);
   const rel = 0.04;
 
@@ -194,6 +199,108 @@ export function bass(ctx, out, t, p, vel, note, stepDur) {
   saw.start(t); saw.stop(stop);
   sub.start(t); sub.stop(stop);
   return g; // engine chokes the previous note → true mono acid line
+}
+
+// deep techno / deep house: pure sub with a pitch thump, tanh saturation for
+// audible harmonics, lowpass to tame them. RES maps to drive. High FX send
+// turns this into the classic reverb-rumble bed under the kick.
+function bassDeep(ctx, out, t, p, vel, f, stepDur) {
+  const gate = stepDur * (0.6 + p.decay * 2.6);
+  const rel = 0.07;
+
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(f * 2.2, t);
+  osc.frequency.exponentialRampToValueAtTime(f, t + 0.05);
+
+  const sh = ctx.createWaveShaper();
+  sh.curve = satCurve(1 + p.res * 7);
+  sh.oversample = '2x';
+
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 55 * Math.pow(2, p.cutoff * 4.5);   // 55..1245 Hz
+  lp.Q.value = 2;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vel * 0.72, t + 0.006);
+  g.gain.setValueAtTime(vel * 0.72, t + gate);
+  g.gain.exponentialRampToValueAtTime(0.001, t + gate + rel);
+  g.gain.linearRampToValueAtTime(0, t + gate + rel + 0.01);
+
+  osc.connect(sh).connect(lp).connect(g).connect(out);
+  osc.start(t); osc.stop(t + gate + rel + 0.02);
+  return g;
+}
+
+// dnb reese: three saws, outer pair detuned (RES = width), sub sine underneath,
+// slow-closing lowpass. Soft 8 ms attack so long notes swell instead of spit.
+function bassReese(ctx, out, t, p, vel, f, stepDur) {
+  const gate = stepDur * (0.6 + p.decay * 2.8);
+  const rel = 0.09;
+  const width = 8 + p.res * 35;                        // detune, cents
+
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  const fc = 80 * Math.pow(2, p.cutoff * 5);           // 80..2560 Hz
+  lp.frequency.setValueAtTime(Math.min(fc * 1.6, 6000), t);
+  lp.frequency.setTargetAtTime(fc, t, 0.2);
+  lp.Q.value = 3;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vel * 0.55, t + 0.008);
+  g.gain.setValueAtTime(vel * 0.55, t + gate);
+  g.gain.exponentialRampToValueAtTime(0.001, t + gate + rel);
+  g.gain.linearRampToValueAtTime(0, t + gate + rel + 0.01);
+
+  const stop = t + gate + rel + 0.02;
+  for (const det of [-width, 0, width]) {
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = f;
+    o.detune.value = det;
+    const og = ctx.createGain();
+    og.gain.value = 0.22;
+    o.connect(og).connect(lp);
+    o.start(t); o.stop(stop);
+  }
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.value = f;
+  const sg = ctx.createGain();
+  sg.gain.value = 0.4;
+  sub.connect(sg).connect(g);                          // sub bypasses the filter
+  sub.start(t); sub.stop(stop);
+
+  lp.connect(g).connect(out);
+  return g;
+}
+
+// user sample, sliced into 16 equal parts of the [OFS, OFS+LEN] window.
+// TUN = ±12 semitones playback rate. Returns gain for mono choke.
+export function sample(ctx, out, t, p, vel, buffer, slice, stepDur) {
+  const rate = Math.pow(2, (p.tune * 24 - 12) / 12);
+  const winLen = Math.max(0.02, buffer.duration * (0.05 + p.len * 0.95));
+  const winStart = Math.min(buffer.duration - winLen, buffer.duration * p.ofs);
+  const offset = Math.max(0, winStart) + (slice / 16) * winLen;
+  const gate = stepDur * (0.4 + p.decay * 3.6);
+
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.playbackRate.value = rate;
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vel, t + 0.003);
+  g.gain.setValueAtTime(vel, t + gate);
+  g.gain.linearRampToValueAtTime(0, t + gate + 0.02);
+
+  src.connect(g).connect(out);
+  src.start(t, offset);
+  src.stop(t + gate + 0.05);
+  return g;
 }
 
 const ROOT_STAB = 220;  // A3
