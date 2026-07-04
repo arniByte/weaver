@@ -1,34 +1,51 @@
 // engine.js — AudioContext graph + lookahead sequencer.
 //
-// Routing:  voice → trackIn → levelGain ─→ duckBus ─→ comp → limiter → master → analyser → out
-//                                └─→ sendGain ─→ fxIn ─→ ping-pong delay ┐
-//                                              └─→ convolver reverb ────┴→ duckBus
-// The kick bypasses duckBus (it drives the sidechain pump instead).
+// Routing:
+//   voice → trackIn → levelGain ─→ duckBus ──┐
+//                       └→ sendGain → fxIn → delay/reverb → duckBus
+//   kick:   levelGain → sum (unducked, drives the duck itself)
+//           sendGain  → rumble bus (reverb → 32..170 Hz band → saturation → duck)
+//   duckBus + kick → sum → DJ LP → DJ HP(26 Hz floor) → glue comp → limiter
+//                  → soft clip → master → analyser → out
+//
+// Drum hits come from the pre-rendered DrumCache when available (cheap buffer
+// playback — the mobile crackle fix); unknown param combos synthesize live once.
 
 import { TRACKS, STEPS } from './state.js';
 import * as V from './voices.js';
+import { DrumCache, CACHED_DRUMS } from './drumcache.js';
 
 const LOOKAHEAD_MS = 25;        // scheduler tick
 const SCHEDULE_AHEAD = 0.1;     // seconds of audio scheduled in advance
+
+export const IS_MOBILE = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
+
+const lerp = (a, b, x) => a + (b - a) * x;
 
 export class Engine {
   constructor(state) {
     this.state = state;
     this.ctx = null;
     this.running = false;
+    this.sample = null;          // user AudioBuffer
+    this.sampleName = '';
+    this.onBar = null;           // (barIndex, barTime) → autopilot hook
     this._timer = null;
     this._step = 0;
+    this._bar = 0;
     this._nextTime = 0;
-    this._queue = [];           // {step, time} for UI playhead sync
+    this._queue = [];            // {step, time} for UI playhead sync
     this._lastStep = 0;
     this._openHats = [];
     this._lastBass = null;
+    this._lastSmp = null;
   }
 
   init() {
     if (this.ctx) return;
     const AC = window.AudioContext || window.webkitAudioContext;
-    const ctx = this.ctx = new AC({ latencyHint: 'interactive' });
+    const ctx = this.ctx = new AC({ latencyHint: IS_MOBILE ? 'playback' : 'interactive' });
+    this.drums = new DrumCache(ctx.sampleRate);
 
     this.master = ctx.createGain();
     this.master.gain.value = this.state.master * this.state.master;
@@ -41,22 +58,47 @@ export class Engine {
     this.comp.release.value = 0.18;
 
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -2;
+    this.limiter.threshold.value = -3;
     this.limiter.knee.value = 0;
     this.limiter.ratio.value = 20;
     this.limiter.attack.value = 0.001;
     this.limiter.release.value = 0.08;
+
+    // gentle tanh ceiling after the limiter: catches inter-sample peaks, adds
+    // the harmonics that make subs read on phone speakers
+    this.clip = ctx.createWaveShaper();
+    const n = 2048, curve = new Float32Array(n);
+    const K = 1.4, norm = Math.tanh(K);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(K * x) / norm;
+    }
+    this.clip.curve = curve;
+    this.clip.oversample = IS_MOBILE ? 'none' : '2x';
 
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.82;
 
     this.duck = ctx.createGain();   // sidechain pump bus
-    this.duck.gain.value = 1;
+    this.sum = ctx.createGain();
 
-    this.duck.connect(this.comp);
+    this.djLP = ctx.createBiquadFilter();
+    this.djLP.type = 'lowpass';
+    this.djLP.frequency.value = 19500;
+    this.djLP.Q.value = 1.5;
+    this.djHP = ctx.createBiquadFilter();
+    this.djHP.type = 'highpass';
+    this.djHP.frequency.value = 26;  // doubles as the master DC/rumble floor
+    this.djHP.Q.value = 1;
+
+    this.duck.connect(this.sum);
+    this.sum.connect(this.djLP);
+    this.djLP.connect(this.djHP);
+    this.djHP.connect(this.comp);
     this.comp.connect(this.limiter);
-    this.limiter.connect(this.master);
+    this.limiter.connect(this.clip);
+    this.clip.connect(this.master);
     this.master.connect(this.analyser);
     this.analyser.connect(ctx.destination);
 
@@ -84,12 +126,27 @@ export class Engine {
     fxOut.connect(this.duck);
 
     const conv = ctx.createConvolver();
-    conv.buffer = this._impulse(1.7);
+    conv.buffer = this._impulse(IS_MOBILE ? 1.1 : 1.7, IS_MOBILE ? 1 : 2, 2.8);
     const convG = ctx.createGain();
     convG.gain.value = 0.35;
     this.fxIn.connect(conv).connect(convG).connect(this.duck);
 
+    // ---- rumble bus (deep techno): kick send → long reverb → 32..170 Hz band
+    // → saturation → ducked. The classic rumble bed lives here.
+    this.rumbleIn = ctx.createGain();
+    const rConv = ctx.createConvolver();
+    rConv.buffer = this._impulse(IS_MOBILE ? 1.4 : 2.2, 1, 2.2);
+    const rHP = ctx.createBiquadFilter();
+    rHP.type = 'highpass'; rHP.frequency.value = 32;
+    const rLP = ctx.createBiquadFilter();
+    rLP.type = 'lowpass'; rLP.frequency.value = 170;
+    const rSat = ctx.createWaveShaper();
+    rSat.curve = curve;             // reuse the tanh curve
+    const rG = ctx.createGain(); rG.gain.value = 1.5;
+    this.rumbleIn.connect(rConv).connect(rHP).connect(rLP).connect(rSat).connect(rG).connect(this.duck);
+
     this.updateDelayTime();
+    this.setFilter(this.state.filter);
 
     // ---- per-track channels ----
     this.trackIn = {};
@@ -100,8 +157,8 @@ export class Engine {
       const lvl = ctx.createGain();
       const snd = ctx.createGain();
       inp.connect(lvl);
-      lvl.connect(t.id === 'kick' ? this.comp : this.duck);
-      lvl.connect(snd).connect(this.fxIn);
+      lvl.connect(t.id === 'kick' ? this.sum : this.duck);
+      lvl.connect(snd).connect(t.id === 'kick' ? this.rumbleIn : this.fxIn);
       this.trackIn[t.id] = inp;
       this.levelG[t.id] = lvl;
       this.sendG[t.id] = snd;
@@ -109,14 +166,14 @@ export class Engine {
     }
   }
 
-  _impulse(seconds) {
+  _impulse(seconds, channels, curvePow) {
     const rate = this.ctx.sampleRate;
     const len = Math.floor(seconds * rate);
-    const buf = this.ctx.createBuffer(2, len, rate);
-    for (let ch = 0; ch < 2; ch++) {
+    const buf = this.ctx.createBuffer(channels, len, rate);
+    for (let ch = 0; ch < channels; ch++) {
       const d = buf.getChannelData(ch);
       for (let i = 0; i < len; i++) {
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8);
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, curvePow);
       }
     }
     return buf;
@@ -135,13 +192,34 @@ export class Engine {
     if (this.ctx) this.master.gain.setTargetAtTime(v * v, this.ctx.currentTime, 0.012);
   }
 
+  // v ∈ [-1, 1]: negative sweeps the lowpass down (underwater), positive sweeps
+  // the highpass up (thin out). 0 = neutral. Exponential — like a real DJ filter.
+  setFilter(v) {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    let lp = 19500, hp = 26;
+    if (v < 0) lp = Math.exp(lerp(Math.log(19500), Math.log(150), -v));
+    else if (v > 0) hp = Math.exp(lerp(Math.log(26), Math.log(2500), v));
+    this.djLP.frequency.setTargetAtTime(lp, now, 0.05);
+    this.djHP.frequency.setTargetAtTime(hp, now, 0.05);
+  }
+
+  setSample(buffer, name) {
+    this.sample = buffer;
+    this.sampleName = name;
+  }
+
   updateDelayTime() {
     if (!this.ctx) return;
-    const beat = 60 / this.state.bpm;
-    const dotted8 = beat * 0.75;
+    const dotted8 = (60 / this.state.bpm) * 0.75;
     const now = this.ctx.currentTime;
     this.dL.delayTime.setTargetAtTime(dotted8, now, 0.08);
     this.dR.delayTime.setTargetAtTime(dotted8, now, 0.08);
+  }
+
+  primeDrums() {
+    if (!this.drums) return;
+    for (const id of CACHED_DRUMS) this.drums.prime(id, this.state.tracks[id].params);
   }
 
   // ---------- transport ----------
@@ -151,7 +229,9 @@ export class Engine {
     this.ctx.resume();
     if (this.running) return;
     this.running = true;
+    this.primeDrums();
     this._step = 0;
+    this._bar = 0;
     this._queue = [];
     this._lastStep = 0;
     this._nextTime = this.ctx.currentTime + 0.06;
@@ -163,6 +243,7 @@ export class Engine {
     if (this._timer) clearInterval(this._timer);
     this._timer = null;
     this._queue = [];
+    if (this.ctx) this.duck.gain.setTargetAtTime(1, this.ctx.currentTime, 0.05);
   }
 
   toggle() { this.running ? this.stop() : this.start(); }
@@ -171,6 +252,7 @@ export class Engine {
     const horizon = this.ctx.currentTime + SCHEDULE_AHEAD;
     while (this._nextTime < horizon) {
       const s = this.state;
+      if (this._step === 0 && this.onBar) this.onBar(this._bar++, this._nextTime);
       const sixteenth = 60 / s.bpm / 4;
       let t = this._nextTime;
       if (this._step % 2 === 1) t += sixteenth * (s.swing - 50) / 50; // MPC-style swing on odd 16ths
@@ -193,31 +275,64 @@ export class Engine {
       const p = tr.params;
       switch (trk.id) {
         case 'kick':
-          V.kick(ctx, out, t, p, vel);
+          this._drum('kick', t, p, vel);
           this._duck(t);
           break;
-        case 'snare': V.snare(ctx, out, t, p, vel); break;
-        case 'clap':  V.clap(ctx, out, t, p, vel); break;
+        case 'snare': this._drum('snare', t, p, vel); break;
+        case 'clap':  this._drum('clap', t, p, vel); break;
+        case 'nse':   this._drum('nse', t, p, vel); break;
         case 'chh':
           this._chokeOpenHats(t);
-          V.hat(ctx, out, t, p, vel, false);
+          this._drum('chh', t, p, vel);
           break;
         case 'ohh': {
           this._chokeOpenHats(t);
-          const g = V.hat(ctx, out, t, p, vel, true);
-          this._openHats.push(g);
-          if (this._openHats.length > 4) this._openHats.shift();
+          const g = this._drum('ohh', t, p, vel);
+          if (g) {
+            this._openHats.push(g);
+            if (this._openHats.length > 4) this._openHats.shift();
+          }
           break;
         }
         case 'bass': {
           if (this._lastBass) this._chokeGain(this._lastBass, t);
-          this._lastBass = V.bass(ctx, out, t, p, vel, tr.notes[step], sixteenth);
+          this._lastBass = V.bass(ctx, out, t, p, vel, tr.notes[step], sixteenth, tr.mode || 0);
           break;
         }
         case 'stab': V.stab(ctx, out, t, p, vel); break;
-        case 'nse':  V.sweep(ctx, out, t, p, vel); break;
+        case 'smp': {
+          if (!this.sample) break;
+          if (this._lastSmp) this._chokeGain(this._lastSmp, t);
+          this._lastSmp = V.sample(ctx, out, t, p, vel, this.sample, tr.slices[step], sixteenth);
+          break;
+        }
       }
     }
+  }
+
+  // Cached-buffer drum hit; falls back to live synthesis while a render is
+  // pending. Returns a gain node for chokeable voices (open hat).
+  _drum(id, t, p, vel) {
+    const ctx = this.ctx;
+    const out = this.trackIn[id];
+    const buf = this.drums.get(id, p, vel);
+    if (buf) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      src.connect(g).connect(out);
+      src.start(t);
+      return g;
+    }
+    switch (id) {
+      case 'kick':  V.kick(ctx, out, t, p, vel); return null;
+      case 'snare': V.snare(ctx, out, t, p, vel); return null;
+      case 'clap':  V.clap(ctx, out, t, p, vel); return null;
+      case 'nse':   V.sweep(ctx, out, t, p, vel); return null;
+      case 'chh':   V.hat(ctx, out, t, p, vel, false); return null;
+      case 'ohh':   return V.hat(ctx, out, t, p, vel, true);
+    }
+    return null;
   }
 
   _chokeGain(g, t) {
@@ -231,13 +346,13 @@ export class Engine {
   }
 
   _duck(t) {
-    const depth = this.state.pump * 0.6;
+    const depth = this.state.pump * 0.72;
     if (depth <= 0.001) return;
     const g = this.duck.gain;
     if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t);
     else g.cancelScheduledValues(t);
-    g.setTargetAtTime(1 - depth, t, 0.012);
-    g.setTargetAtTime(1, t + 0.09, 0.11);
+    g.setTargetAtTime(1 - depth, t, 0.012);   // ~5 ms dip, ~50 ms hold…
+    g.setTargetAtTime(1, t + 0.06, 0.09);     // …recover in ~250-300 ms
   }
 
   // step currently sounding (for playhead / viz), derived from the schedule queue
