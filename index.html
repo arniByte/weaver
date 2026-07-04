@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<title>WEAVER — sequencer</title>
+<meta name="description" content="Minimal browser groovebox: house / techno / edm / dnb. 100% procedural Web Audio synthesis. No samples.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Crect x='6' y='6' width='4' height='4' fill='%2300ff41'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="top">
+  <div id="brand">WEAVER<span class="dim">/SEQ.01</span></div>
+  <div class="hgroup" id="transport">
+    <button id="play" title="space">&#9654;</button>
+    <label class="num">BPM<input id="bpm" type="number" min="60" max="200" step="1" value="124"></label>
+    <label class="num">SWG<input id="swing" type="number" min="50" max="75" step="1" value="50"></label>
+  </div>
+  <div class="hgroup" id="presets"></div>
+  <div class="hgroup" id="tools">
+    <button id="clear" title="clear all steps">CLR</button>
+    <button id="random" title="random pattern">RND</button>
+    <button id="share" title="copy link with current state">URL</button>
+    <label class="sl wide">PMP<input id="pump" type="range" min="0" max="1" step="0.01"></label>
+    <label class="sl wide">OUT<input id="master" type="range" min="0" max="1" step="0.01"></label>
+  </div>
+</header>
+
+<div id="vizwrap">
+  <canvas id="viz"></canvas>
+</div>
+
+<main id="gridwrap">
+  <div id="grid"></div>
+</main>
+
+<footer>
+  <span>CLICK&thinsp;=&thinsp;STEP &middot; SHIFT+CLICK&thinsp;=&thinsp;ACCENT &middot; DRAG BS CELL&thinsp;=&thinsp;PITCH &middot; SPACE&thinsp;=&thinsp;RUN &middot; 1&ndash;4&thinsp;=&thinsp;PRESET</span>
+  <span class="dim">100% PROCEDURAL SYNTHESIS &middot; WEB AUDIO &middot; NO SAMPLES</span>
+</footer>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
