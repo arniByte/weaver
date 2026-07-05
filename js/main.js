@@ -1,7 +1,7 @@
 // main.js — builds the sequencer UI and wires it to the engine.
 
 import {
-  TRACKS, STEPS, PRESET_ORDER, BASS_MODES, applyPreset, randomize,
+  TRACKS, STEPS, PRESET_ORDER, applyPreset, randomize,
   serialize, saveLocal, loadInitialState,
 } from './state.js';
 import { Engine } from './engine.js';
@@ -60,7 +60,7 @@ function buildGrid() {
     const stepsWrap = div('steps');
     const cells = [];
     for (let i = 0; i < STEPS; i++) {
-      const c = div('cell');
+      const c = div(t.notes || t.slices ? 'cell lane' : 'cell');
       c.dataset.step = i;
       if (t.notes || t.slices) {
         const n = document.createElement('span');
@@ -72,6 +72,13 @@ function buildGrid() {
       }
       cells.push(c);
       stepsWrap.appendChild(c);
+    }
+    let dropzone = null;
+    if (t.slices) {
+      dropzone = div('dropzone');
+      dropzone.textContent = 'DROP AUDIO — OR CLICK TO LOAD YOUR TRACK';
+      dropzone.addEventListener('click', () => $('file').click());
+      stepsWrap.appendChild(dropzone);
     }
     row.appendChild(stepsWrap);
 
@@ -87,10 +94,11 @@ function buildGrid() {
     if (t.modes) {
       modeBtn = document.createElement('button');
       modeBtn.className = 'mode';
-      modeBtn.title = 'bass engine: acid / deep rumble / reese';
+      modeBtn.title = 'sound engine: ' + t.modes.join(' / ');
       modeBtn.addEventListener('click', () => {
         const tr = state.tracks[t.id];
-        tr.mode = ((tr.mode || 0) + 1) % BASS_MODES.length;
+        tr.mode = ((tr.mode || 0) + 1) % t.modes.length;
+        if (engine.drums) engine.drums.prime(t.id, tr.params, tr.mode);
         renderTrack(t.id);
         dirty();
       });
@@ -126,7 +134,7 @@ function buildGrid() {
     row.appendChild(ctrls);
 
     grid.appendChild(row);
-    rows[t.id] = { row, cells, sliders, muteBtn, modeBtn, fname };
+    rows[t.id] = { row, cells, sliders, muteBtn, modeBtn, fname, dropzone };
   }
 }
 
@@ -224,12 +232,14 @@ function renderCell(id, i) {
 function renderTrack(id) {
   const tr = state.tracks[id];
   const r = rows[id];
+  const def = TRACKS.find(t => t.id === id);
   for (let i = 0; i < STEPS; i++) renderCell(id, i);
   r.row.classList.toggle('muted', tr.mute);
   r.muteBtn.classList.toggle('active', tr.mute);
   for (const s of r.sliders) s.sync();
-  if (r.modeBtn) r.modeBtn.textContent = BASS_MODES[tr.mode || 0];
+  if (r.modeBtn) r.modeBtn.textContent = def.modes[tr.mode || 0];
   if (r.fname) r.fname.textContent = engine.sampleName || 'NO FILE';
+  if (r.dropzone) r.dropzone.style.display = engine.samples.length ? 'none' : 'flex';
 }
 
 const header = {};
@@ -241,6 +251,7 @@ function syncHeader() {
 function renderAll() {
   for (const t of TRACKS) renderTrack(t.id);
   syncHeader();
+  $('abars').textContent = (state.autoBars || 32) + 'BR';
 }
 
 function toggleMute(id) {
@@ -321,6 +332,14 @@ function toggleAuto() {
 }
 $('auto').addEventListener('click', toggleAuto);
 
+const AB_CHOICES = [16, 32, 48, 64];
+$('abars').addEventListener('click', () => {
+  const i = AB_CHOICES.indexOf(state.autoBars);
+  state.autoBars = AB_CHOICES[(i + 1) % AB_CHOICES.length];
+  $('abars').textContent = state.autoBars + 'BR';
+  dirty();
+});
+
 document.addEventListener('keydown', e => {
   const isInput = e.target.tagName === 'INPUT';
   if (e.code === 'Space') {
@@ -389,28 +408,57 @@ $('share').addEventListener('click', async () => {
   setTimeout(() => { btn.textContent = 'URL'; }, 1200);
 });
 
-// ---------- sample loading ----------
+// ---------- sample pool ----------
 
-async function loadSampleFile(file) {
-  if (!file) return;
-  try {
-    engine.init();
-    const raw = await file.arrayBuffer();
-    const buf = await engine.ctx.decodeAudioData(raw);
-    engine.setSample(buf, file.name.toUpperCase().slice(0, 18));
-    renderTrack('smp');
-  } catch {
-    engine.setSample(null, 'DECODE ERR');
-    renderTrack('smp');
-  }
+const poolBox = $('pool');
+
+function renderPool() {
+  poolBox.textContent = '';
+  const lab = document.createElement('span');
+  lab.className = 'plabel';
+  lab.textContent = 'SMP POOL';
+  poolBox.appendChild(lab);
+  engine.samples.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (i === engine.activeSample ? ' active' : '');
+    b.textContent = `${String(i + 1).padStart(2, '0')} ${s.name}`;
+    b.title = 'use this sample on the SP track';
+    b.addEventListener('click', () => {
+      engine.activeSample = i;
+      renderPool();
+      renderTrack('smp');
+    });
+    poolBox.appendChild(b);
+  });
+  const add = document.createElement('button');
+  add.className = 'chip add';
+  add.textContent = '+ ADD YOUR TRACK';
+  add.addEventListener('click', () => $('file').click());
+  poolBox.appendChild(add);
 }
 
-$('file').addEventListener('change', e => loadSampleFile(e.target.files[0]));
+async function loadSampleFiles(files) {
+  engine.init();
+  for (const file of files) {
+    try {
+      const raw = await file.arrayBuffer();
+      const buf = await engine.ctx.decodeAudioData(raw);
+      engine.addSample(buf, file.name.toUpperCase().slice(0, 22));
+    } catch { /* undecodable file — skip */ }
+  }
+  renderPool();
+  renderTrack('smp');
+}
+
+$('file').addEventListener('change', e => {
+  loadSampleFiles([...e.target.files]);
+  e.target.value = '';
+});
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => {
   e.preventDefault();
-  const f = [...(e.dataTransfer?.files || [])].find(f => f.type.startsWith('audio/'));
-  if (f) loadSampleFile(f);
+  const fs = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith('audio/'));
+  if (fs.length) loadSampleFiles(fs);
 });
 
 // ---------- autosave ----------
@@ -445,6 +493,7 @@ function frame() {
 // ---------- boot ----------
 
 buildGrid();
+renderPool();
 renderAll();
 saveLocal(state);   // persist whatever we booted from (incl. a shared URL)
 requestAnimationFrame(frame);

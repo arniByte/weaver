@@ -1,14 +1,14 @@
-// drumcache.js — drums are param-static per hit, so each (voice, params, velocity)
-// combo is rendered ONCE in an OfflineAudioContext and then replayed as a buffer.
-// One AudioBufferSourceNode per hit instead of a fresh 6-osc graph — this is what
-// keeps low-end phones from crackling. Unknown combos fall back to live synthesis
-// for the first hit while the render fills in.
+// drumcache.js — drums are param-static per hit, so each (voice, mode, params,
+// velocity) combo is rendered ONCE in an OfflineAudioContext and then replayed
+// as a buffer. One AudioBufferSourceNode per hit instead of a fresh multi-osc
+// graph — this is what keeps low-end phones from crackling. Unknown combos fall
+// back to live synthesis for the first hit while the render fills in.
 
 import * as V from './voices.js';
 
 const DUR = {
-  kick:  p => 0.24 + p.decay * 0.55,
-  snare: p => 0.28 + p.decay * 0.28,
+  kick:  (p, m) => m === 1 ? 0.4 + p.decay * 1.15 : m === 2 ? 0.2 + p.decay * 0.4 : 0.24 + p.decay * 0.55,
+  snare: (p, m) => m === 1 ? 0.12 : 0.28 + p.decay * 0.28,
   clap:  p => 0.25 + p.decay * 0.35,
   chh:   p => 0.10 + p.decay * 0.09,
   ohh:   p => 0.30 + p.decay * 0.50,
@@ -23,40 +23,40 @@ export class DrumCache {
     this.map = new Map();          // key → AudioBuffer | null (render pending)
   }
 
-  _key(id, p, vel) {
-    let k = id + '|' + vel;
+  _key(id, p, vel, mode) {
+    let k = id + '|' + vel + '|' + mode;
     for (const q of Object.keys(p).sort()) k += '|' + Math.round(p[q] * 100);
     return k;
   }
 
   // Synchronous: returns a buffer or null (and kicks off the render if unknown).
-  get(id, p, vel) {
-    const k = this._key(id, p, vel);
+  get(id, p, vel, mode = 0) {
+    const k = this._key(id, p, vel, mode);
     const e = this.map.get(k);
     if (e === undefined) {
-      this._render(id, { ...p }, vel, k);
+      this._render(id, { ...p }, vel, mode, k);
       return null;
     }
     return e;
   }
 
-  prime(id, p) {
-    this.get(id, p, 0.72);
-    this.get(id, p, 1);
+  prime(id, p, mode = 0) {
+    this.get(id, p, 0.72, mode);
+    this.get(id, p, 1, mode);
   }
 
-  async _render(id, p, vel, k) {
+  async _render(id, p, vel, mode, k) {
     this.map.set(k, null);
     try {
-      const dur = DUR[id](p) + 0.05;
+      const dur = DUR[id](p, mode) + 0.05;
       const oc = new OfflineAudioContext(1, Math.ceil(dur * this.sr), this.sr);
       const t = 0.005;
       switch (id) {
-        case 'kick':  V.kick(oc, oc.destination, t, p, vel); break;
-        case 'snare': V.snare(oc, oc.destination, t, p, vel); break;
+        case 'kick':  V.kick(oc, oc.destination, t, p, vel, mode); break;
+        case 'snare': V.snare(oc, oc.destination, t, p, vel, mode); break;
         case 'clap':  V.clap(oc, oc.destination, t, p, vel); break;
-        case 'chh':   V.hat(oc, oc.destination, t, p, vel, false); break;
-        case 'ohh':   V.hat(oc, oc.destination, t, p, vel, true); break;
+        case 'chh':   V.hat(oc, oc.destination, t, p, vel, false, mode); break;
+        case 'ohh':   V.hat(oc, oc.destination, t, p, vel, true, mode); break;
         case 'nse':   V.sweep(oc, oc.destination, t, p, vel); break;
       }
       const buf = await oc.startRendering();

@@ -140,7 +140,50 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
   display: grid;
   grid-template-columns: repeat(16, 1fr);
   gap: 3px;
+  position: relative;
 }
+
+.dropzone {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .82);
+  border: 1px dashed var(--acc-dim);
+  color: var(--acc);
+  font-size: 9px;
+  letter-spacing: .14em;
+  cursor: pointer;
+  text-align: center;
+  padding: 0 6px;
+}
+.dropzone:hover { border-color: var(--acc); }
+
+/* ---------- sample pool ---------- */
+
+#pool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+#pool .plabel { color: var(--dim); font-size: 10px; letter-spacing: .15em; }
+#pool .chip {
+  font-size: 10px;
+  padding: 4px 8px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#pool .chip.active { border-color: var(--acc); color: var(--acc); }
+#pool .chip.add { color: var(--dim); }
+#pool .chip.add:hover { color: var(--acc); border-color: var(--acc); }
 
 .track.header { margin-bottom: 8px; }
 .track.header .idx {
@@ -168,8 +211,9 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
   cursor: pointer;
   position: relative;
   background: #050505;
-  touch-action: none;
+  touch-action: manipulation;   /* plain cells must not block page scroll */
 }
+.cell.lane { touch-action: none; }  /* bass/sample cells: vertical drag edits value */
 .steps .cell:nth-child(4n+1) { border-left-color: var(--line-hi); }
 .cell:hover { border-color: var(--fg); }
 .cell.on { background: var(--on); border-color: var(--on); }

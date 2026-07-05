@@ -4,15 +4,14 @@
 export const STEPS = 16;
 export const STORAGE_KEY = 'weaver.state.v2';
 
-export const BASS_MODES = ['ACD', 'DEP', 'RSE'];   // acid / deep-rumble / reese
-
+// Tracks with `modes` carry alternate sound engines, switched by a button.
 export const TRACKS = [
-  { id: 'kick',  label: 'BD', params: [['tune', 'TUN'], ['decay', 'DEC'], ['drive', 'DRV']] },
-  { id: 'snare', label: 'SD', params: [['tone', 'TON'], ['decay', 'DEC']] },
+  { id: 'kick',  label: 'BD', modes: ['909', '808', 'HRD'], params: [['tune', 'TUN'], ['decay', 'DEC'], ['drive', 'DRV']] },
+  { id: 'snare', label: 'SD', modes: ['CLS', 'RIM'], params: [['tone', 'TON'], ['decay', 'DEC']] },
   { id: 'clap',  label: 'CP', params: [['tone', 'TON'], ['decay', 'DEC']] },
-  { id: 'chh',   label: 'CH', params: [['tone', 'TON'], ['decay', 'DEC']] },
-  { id: 'ohh',   label: 'OH', params: [['tone', 'TON'], ['decay', 'DEC']] },
-  { id: 'bass',  label: 'BS', params: [['cutoff', 'CUT'], ['res', 'RES'], ['decay', 'DEC']], notes: true, modes: true },
+  { id: 'chh',   label: 'CH', modes: ['MTL', 'NSE'], params: [['tone', 'TON'], ['decay', 'DEC']] },
+  { id: 'ohh',   label: 'OH', modes: ['MTL', 'NSE'], params: [['tone', 'TON'], ['decay', 'DEC']] },
+  { id: 'bass',  label: 'BS', modes: ['ACD', 'DEP', 'RSE'], params: [['cutoff', 'CUT'], ['res', 'RES'], ['decay', 'DEC']], notes: true },
   { id: 'stab',  label: 'ST', params: [['chord', 'CHD'], ['cutoff', 'CUT'], ['decay', 'DEC']] },
   { id: 'nse',   label: 'NS', params: [['tone', 'TON'], ['decay', 'DEC']] },
   { id: 'smp',   label: 'SP', params: [['tune', 'TUN'], ['ofs', 'OFS'], ['len', 'LEN'], ['decay', 'DEC']], slices: true },
@@ -52,7 +51,7 @@ export function defaultState() {
       params: { ...PARAM_DEFAULTS[t.id] },
     };
   }
-  return { v: 2, bpm: 124, swing: 50, master: .8, pump: .4, filter: 0, tracks };
+  return { v: 2, bpm: 124, swing: 50, master: .8, pump: .4, filter: 0, autoBars: 32, tracks };
 }
 
 // Each preset: 1-bar genre-correct groove. Only listed fields override defaults.
@@ -62,7 +61,7 @@ export const PRESETS = {
     tracks: {
       kick:  { steps: pat('X...x...X...x...'), params: { tune: .45, decay: .45, drive: .35 }, level: .9, send: .15 },
       clap:  { steps: pat('....x.......x...'), params: { tone: .5, decay: .5 }, level: .65, send: .3 },
-      chh:   { steps: pat('xx.xxx.xxx.xxx.x'), params: { tone: .55, decay: .3 }, level: .42 },
+      chh:   { steps: pat('xx.xxx.xxx.xxx.x'), mode: 1, params: { tone: .55, decay: .3 }, level: .42 },
       ohh:   { steps: pat('..X...X...X...X.'), params: { tone: .5, decay: .45 }, level: .5, send: .1 },
       bass:  { steps: pat('..x...x...x...x.'), notes: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,-2,0], mode: 0,
                params: { cutoff: .5, res: .3, decay: .5 }, level: .8 },
@@ -72,9 +71,9 @@ export const PRESETS = {
   deep: {
     bpm: 127, swing: 56, pump: .55,
     tracks: {
-      kick:  { steps: pat('X...X...X...X...'), params: { tune: .3, decay: .55, drive: .45 }, level: .95, send: .7 },
+      kick:  { steps: pat('X...X...X...X...'), mode: 1, params: { tune: .35, decay: .45, drive: .35 }, level: .95, send: .7 },
       clap:  { steps: pat('....x.......x...'), params: { tone: .38, decay: .45 }, level: .42, send: .45 },
-      chh:   { steps: pat('..x...x...x...x.'), params: { tone: .42, decay: .32 }, level: .38 },
+      chh:   { steps: pat('..x...x...x...x.'), mode: 1, params: { tone: .42, decay: .32 }, level: .38 },
       nse:   { steps: pat('x.x.x.x.x.x.x.x.'), params: { tone: .5, decay: .04 }, level: .14 },
       bass:  { steps: pat('.xx..xx..xx..xx.'), notes: new Array(STEPS).fill(0), mode: 1,
                params: { cutoff: .35, res: .5, decay: .45 }, level: .85, send: .3 },
@@ -96,7 +95,7 @@ export const PRESETS = {
   edm: {
     bpm: 128, swing: 50, pump: .7,
     tracks: {
-      kick:  { steps: pat('X...X...X...X...'), params: { tune: .5, decay: .6, drive: .45 }, level: .95 },
+      kick:  { steps: pat('X...X...X...X...'), params: { tune: .5, decay: .6, drive: .45 }, level: .95, send: .2 },
       clap:  { steps: pat('....X.......X...'), params: { tone: .55, decay: .55 }, level: .8, send: .35 },
       chh:   { steps: pat('x.x.x.x.x.x.x.x.'), params: { tone: .5, decay: .3 }, level: .4 },
       ohh:   { steps: pat('..x...x...x...x.'), params: { tone: .5, decay: .4 }, level: .45 },
@@ -173,40 +172,125 @@ export function randomize(state, only) {
 }
 
 // ---------- persistence ----------
+// v3 wire format: compact binary → base64url, prefixed "w3." (~160 chars).
+// Legacy v1/v2 JSON blobs (old links / old localStorage) still decode.
+
+const q = v => Math.max(0, Math.min(100, Math.round(v * 100)));
+
+function b64urlEncode(bytes) {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
 
 export function serialize(state) {
-  return btoa(encodeURIComponent(JSON.stringify(state)));
+  const b = [3,
+    Math.round(state.bpm) - 60,
+    Math.round(state.swing) - 50,
+    q(state.master), q(state.pump),
+    Math.round((state.filter + 1) * 100),
+    state.autoBars || 32,
+  ];
+  for (const t of TRACKS) {
+    const tr = state.tracks[t.id];
+    for (let k = 0; k < 4; k++) {
+      let v = 0;
+      for (let i = 0; i < 4; i++) v |= (tr.steps[k * 4 + i] & 3) << (i * 2);
+      b.push(v);
+    }
+    b.push((tr.mute ? 1 : 0) | ((tr.mode || 0) << 1));
+    b.push(q(tr.level), q(tr.send));
+    for (const [key] of t.params) b.push(q(tr.params[key]));
+    if (t.notes) for (let i = 0; i < STEPS; i++) b.push(tr.notes[i] + 12);
+    if (t.slices) for (let i = 0; i < STEPS; i++) b.push(tr.slices[i] & 15);
+  }
+  return 'w3.' + b64urlEncode(b);
+}
+
+function deserializeV3(str) {
+  const b = b64urlDecode(str);
+  let i = 0;
+  const need = n => { if (i + n > b.length) throw new Error('short'); };
+  need(7);
+  if (b[i++] !== 3) return null;
+  const base = defaultState();
+  base.bpm = clamp(b[i++] + 60, 60, 200);
+  base.swing = clamp(b[i++] + 50, 50, 75);
+  base.master = clamp(b[i++] / 100, 0, 1);
+  base.pump = clamp(b[i++] / 100, 0, 1);
+  base.filter = clamp(b[i++] / 100 - 1, -1, 1);
+  base.autoBars = clamp(b[i++], 8, 64);
+  for (const t of TRACKS) {
+    const tr = base.tracks[t.id];
+    need(4);
+    for (let k = 0; k < 4; k++) {
+      const v = b[i++];
+      for (let s = 0; s < 4; s++) {
+        const sv = (v >> (s * 2)) & 3;
+        tr.steps[k * 4 + s] = sv === 3 ? 0 : sv;
+      }
+    }
+    need(3 + t.params.length);
+    const flags = b[i++];
+    tr.mute = !!(flags & 1);
+    if (t.modes) tr.mode = clamp(flags >> 1, 0, t.modes.length - 1);
+    tr.level = clamp(b[i++] / 100, 0, 1);
+    tr.send = clamp(b[i++] / 100, 0, 1);
+    for (const [key] of t.params) tr.params[key] = clamp(b[i++] / 100, 0, 1);
+    if (t.notes) {
+      need(STEPS);
+      for (let s = 0; s < STEPS; s++) tr.notes[s] = clamp(b[i++] - 12, -12, 12);
+    }
+    if (t.slices) {
+      need(STEPS);
+      for (let s = 0; s < STEPS; s++) tr.slices[s] = clamp(b[i++], 0, 15);
+    }
+  }
+  return base;
+}
+
+function deserializeLegacy(str) {
+  const obj = JSON.parse(decodeURIComponent(atob(str)));
+  if (!obj || (obj.v !== 1 && obj.v !== 2) || !obj.tracks) return null;
+  const base = defaultState();
+  base.bpm = clamp(+obj.bpm || 124, 60, 200);
+  base.swing = clamp(+obj.swing || 50, 50, 75);
+  if (typeof obj.master === 'number') base.master = clamp(obj.master, 0, 1);
+  if (typeof obj.pump === 'number') base.pump = clamp(obj.pump, 0, 1);
+  if (typeof obj.filter === 'number') base.filter = clamp(obj.filter, -1, 1);
+  if (typeof obj.autoBars === 'number') base.autoBars = clamp(Math.round(obj.autoBars), 8, 64);
+  for (const t of TRACKS) {
+    const src = obj.tracks[t.id];
+    if (!src) continue;
+    const dst = base.tracks[t.id];
+    if (Array.isArray(src.steps)) dst.steps = normSteps(src.steps);
+    if (t.notes && Array.isArray(src.notes)) dst.notes = normInts(src.notes, -12, 12);
+    if (t.slices && Array.isArray(src.slices)) dst.slices = normInts(src.slices, 0, 15);
+    if (t.modes && typeof src.mode === 'number') dst.mode = clamp(Math.round(src.mode), 0, t.modes.length - 1);
+    if (typeof src.level === 'number') dst.level = clamp(src.level, 0, 1);
+    if (typeof src.send === 'number') dst.send = clamp(src.send, 0, 1);
+    dst.mute = !!src.mute;
+    if (src.params) {
+      for (const k of Object.keys(dst.params)) {
+        if (typeof src.params[k] === 'number') dst.params[k] = clamp(src.params[k], 0, 1);
+      }
+    }
+  }
+  return base;
 }
 
 export function deserialize(str) {
   try {
-    const obj = JSON.parse(decodeURIComponent(atob(str)));
-    if (!obj || (obj.v !== 1 && obj.v !== 2) || !obj.tracks) return null;
-    // merge over defaults so missing fields never break the app
-    const base = defaultState();
-    base.bpm = clamp(+obj.bpm || 124, 60, 200);
-    base.swing = clamp(+obj.swing || 50, 50, 75);
-    if (typeof obj.master === 'number') base.master = clamp(obj.master, 0, 1);
-    if (typeof obj.pump === 'number') base.pump = clamp(obj.pump, 0, 1);
-    if (typeof obj.filter === 'number') base.filter = clamp(obj.filter, -1, 1);
-    for (const t of TRACKS) {
-      const src = obj.tracks[t.id];
-      if (!src) continue;
-      const dst = base.tracks[t.id];
-      if (Array.isArray(src.steps)) dst.steps = normSteps(src.steps);
-      if (t.notes && Array.isArray(src.notes)) dst.notes = normInts(src.notes, -12, 12);
-      if (t.slices && Array.isArray(src.slices)) dst.slices = normInts(src.slices, 0, 15);
-      if (t.modes && typeof src.mode === 'number') dst.mode = clamp(Math.round(src.mode), 0, BASS_MODES.length - 1);
-      if (typeof src.level === 'number') dst.level = clamp(src.level, 0, 1);
-      if (typeof src.send === 'number') dst.send = clamp(src.send, 0, 1);
-      dst.mute = !!src.mute;
-      if (src.params) {
-        for (const k of Object.keys(dst.params)) {
-          if (typeof src.params[k] === 'number') dst.params[k] = clamp(src.params[k], 0, 1);
-        }
-      }
-    }
-    return base;
+    if (str.startsWith('w3.')) return deserializeV3(str.slice(3));
+    return deserializeLegacy(str);
   } catch {
     return null;
   }

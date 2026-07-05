@@ -38,38 +38,77 @@ function noiseSource(ctx) {
 
 // ---------- drums ----------
 
-export function kick(ctx, out, t, p, vel) {
-  const f0 = 34 + p.tune * 40;              // 34..74 Hz fundamental
-  const dec = 0.12 + p.decay * 0.55;
+// mode 0 '909': pitch-dropped sine + click + drive (current club standard)
+// mode 1 '808': lower, slower drop, long clean sine tail, barely any click
+// mode 2 'HRD': hard rave kick — violent pitch drop into heavy saturation
+export function kick(ctx, out, t, p, vel, mode = 0) {
+  const f0 = mode === 1 ? 28 + p.tune * 32 : 34 + p.tune * 40;
+  const dec = mode === 1 ? 0.3 + p.decay * 1.1
+            : mode === 2 ? 0.1 + p.decay * 0.35
+            : 0.12 + p.decay * 0.55;
+  const startMul = mode === 1 ? 2.5 : mode === 2 ? 10 : 6;
+  const dropTime = mode === 1 ? 0.035 : mode === 2 ? 0.04 : 0.055;
+
   const osc = ctx.createOscillator();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(f0 * 6, t);
-  osc.frequency.exponentialRampToValueAtTime(f0, t + 0.055);
+  osc.frequency.setValueAtTime(f0 * startMul, t);
+  osc.frequency.exponentialRampToValueAtTime(f0, t + dropTime);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(vel, t + 0.0025);
   g.gain.exponentialRampToValueAtTime(0.001, t + dec);
   g.gain.linearRampToValueAtTime(0, t + dec + 0.02);
   const sh = ctx.createWaveShaper();
-  sh.curve = satCurve(1 + p.drive * 9);
+  const k = mode === 1 ? 1 + p.drive * 3 : mode === 2 ? 3 + p.drive * 22 : 1 + p.drive * 9;
+  sh.curve = satCurve(k);
   sh.oversample = '2x';
   osc.connect(g).connect(sh).connect(out);
 
-  // attack click: 8 ms of high-passed noise
-  const nb = noiseSource(ctx);
-  const nf = ctx.createBiquadFilter();
-  nf.type = 'highpass';
-  nf.frequency.value = 1400;
-  const ng = ctx.createGain();
-  ng.gain.setValueAtTime(vel * (0.12 + p.drive * 0.25), t);
-  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
-  nb.connect(nf).connect(ng).connect(out);
+  if (mode !== 1) {
+    // attack click: 8 ms of high-passed noise
+    const nb = noiseSource(ctx);
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'highpass';
+    nf.frequency.value = mode === 2 ? 900 : 1400;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(vel * (0.12 + p.drive * 0.25), t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
+    nb.connect(nf).connect(ng).connect(out);
+    nb.start(t); nb.stop(t + 0.03);
+  }
 
   osc.start(t); osc.stop(t + dec + 0.05);
-  nb.start(t); nb.stop(t + 0.03);
 }
 
-export function snare(ctx, out, t, p, vel) {
+// mode 1 'RIM': rimshot — two resonant pings + a 5 ms noise snap
+function rim(ctx, out, t, p, vel) {
+  const f1 = 900 + p.tone * 900;
+  const dec = 0.025 + p.decay * 0.06;
+  for (const [f, gv] of [[f1, 0.6], [f1 * 2.6, 0.35]]) {
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0, t);
+    og.gain.linearRampToValueAtTime(vel * gv, t + 0.001);
+    og.gain.exponentialRampToValueAtTime(0.001, t + dec);
+    o.connect(og).connect(out);
+    o.start(t); o.stop(t + dec + 0.02);
+  }
+  const nb = noiseSource(ctx);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 3200;
+  bp.Q.value = 1.2;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(vel * 0.5, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.008);
+  nb.connect(bp).connect(ng).connect(out);
+  nb.start(t); nb.stop(t + 0.02);
+}
+
+export function snare(ctx, out, t, p, vel, mode = 0) {
+  if (mode === 1) return rim(ctx, out, t, p, vel);
   const dec = 0.09 + p.decay * 0.28;
   // tonal body
   const body = ctx.createOscillator();
@@ -123,16 +162,33 @@ export function clap(ctx, out, t, p, vel) {
   nb.start(t); nb.stop(tm + tail + 0.02);
 }
 
-// 808-style metallic hat: six detuned square partials
+// 808-style metallic hat: six detuned square partials.
+// mode 1 'NSE': filtered-noise hat — softer, the classic house flavour.
 const HAT_FREQS = [205.3, 304.4, 369.6, 522.7, 540, 800];
 
-export function hat(ctx, out, t, p, vel, open) {
+export function hat(ctx, out, t, p, vel, open, mode = 0) {
   const dec = open ? 0.18 + p.decay * 0.5 : 0.02 + p.decay * 0.09;
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(vel * 0.6, t + 0.001);
+  g.gain.linearRampToValueAtTime(vel * (mode === 1 ? 0.5 : 0.6), t + 0.001);
   g.gain.exponentialRampToValueAtTime(0.001, t + dec);
   g.gain.linearRampToValueAtTime(0, t + dec + 0.01);
+  const stop = t + dec + 0.03;
+
+  if (mode === 1) {
+    const nb = noiseSource(ctx);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 6800 + p.tone * 3800;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 10000 + p.tone * 3000;
+    bp.Q.value = 0.7;
+    nb.connect(hp).connect(bp).connect(g).connect(out);
+    nb.start(t); nb.stop(stop);
+    return g;
+  }
+
   const bp = ctx.createBiquadFilter();
   bp.type = 'bandpass';
   bp.frequency.value = 9500 + p.tone * 3500;
@@ -141,7 +197,6 @@ export function hat(ctx, out, t, p, vel, open) {
   hp.type = 'highpass';
   hp.frequency.value = 6500 + p.tone * 1500;
   const scale = 0.92 + p.tone * 0.22;
-  const stop = t + dec + 0.03;
   for (const f of HAT_FREQS) {
     const o = ctx.createOscillator();
     o.type = 'square';

@@ -19,19 +19,24 @@ or deploy the repo root to Vercel / any static host as-is.
 
 ## Use
 
-- **▶ / space** — run · **AUTO / a** — self-mixing DJ set
+- **▶ / space** — run · **AUTO / a** — self-mixing DJ set · **NNBR** — bars
+  per groove before AUTO changes the track (16/32/48/64)
 - **click** a cell — toggle step; **shift+click** — accent (louder, brighter)
-- **BS row** — drag a cell vertically (or wheel) to set pitch; **mode button**
-  switches the bass engine: ACD acid · DEP deep-techno rumble · RSE reese
-- **SP row** — LOAD (or drop an audio file anywhere): your track sliced into
-  16 pieces; drag a cell to pick the slice; TUN/OFS/LEN/DEC shape it
+- **sound engines** (mode button per track): BD 909/808/HRD · SD CLS/RIM ·
+  CH+OH MTL/NSE · BS ACD/DEP/RSE
+- **BS row** — drag a cell vertically (or wheel) to set pitch
+- **SP row + SMP POOL** — load any number of your own audio files (button or
+  drag&drop); each is sliced into 16 pieces, drag a cell to pick the slice,
+  TUN/OFS/LEN/DEC shape it; in AUTO mode the pool is rotated into the set
+  as sliced textures automatically
 - **BD SD CP CH OH BS ST NS SP** — kick, snare, clap, closed/open hat
   (with choke), bass, chord stab, noise sweep, sampler
 - **1–5** — presets: HOUSE 124 · DEEP 127 · TECHNO 132 · EDM 128 · DNB 174
 - **FLT** — master DJ filter: left = lowpass, right = highpass, double-click
   to reset · **PMP** — sidechain pump · **OUT** — master
 - **CLR / RND** — clear or generate a constrained-random pattern
-- **URL** — copy a link that encodes the whole state
+- **URL** — copy a short link (~170 chars, compact binary encoding) with the
+  whole state
 
 State autosaves to localStorage; a shared URL overrides it.
 
