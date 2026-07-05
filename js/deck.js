@@ -75,19 +75,19 @@ export class DeckPlayer {
     const trim = Math.max(0.35, Math.min(2.2, MIX_RMS / rms));
     const off = Number.isFinite(s.beatOffset) ? s.beatOffset : 0;
     const offset = sync ? Math.max(0, Math.min(off, s.buffer.duration * 0.5)) : 0;
-    return { s, rate, beatDur, trim, offset };
+    return { s, bpm, rate, beatDur, trim, offset };
   }
 
   _load(deck, idx, when, sync) {
     const ctx = this.engine.ctx;
-    const { s, rate, beatDur, trim, offset } = this._prep(idx, sync);
+    const { s, bpm, rate, beatDur, trim, offset } = this._prep(idx, sync);
     if (deck.src) { try { deck.src.onended = null; deck.src.stop(); } catch { /* stopped */ } }
     const src = ctx.createBufferSource();
     src.buffer = s.buffer;
     src.playbackRate.value = rate;
     src.connect(deck.hp);
     deck.src = src;
-    deck.name = s.name; deck.idx = idx; deck.bpm = Math.round((s.bpm || this.mixTempo) * rate);
+    deck.name = s.name; deck.idx = idx; deck.bpm = Math.round(bpm * rate);
     deck.rate = rate; deck.beatDur = beatDur; deck.trim = trim;
     deck.startAt = when;                       // real time the cued downbeat is heard
     deck.dur = (s.buffer.duration - offset) / rate;
