@@ -26,7 +26,10 @@ or deploy the repo root to Vercel / any static host as-is.
   per groove before AUTO changes the track (16/32/48/64)
 - **click** a cell — toggle step; **shift+click** — accent (louder, brighter)
 - **sound engines** (mode button per track): BD 909/808/HRD · SD CLS/RIM ·
-  CH+OH MTL/NSE · BS ACD/DEP/RSE · **LD / PL SIN/TRI/SAW/SQR** (waveform)
+  CH+OH MTL/NSE · BS ACD/DEP/RSE · **ST STB/CRD/PAD** (stab / dub chord /
+  evolving pad) · **LD / PL SIN/TRI/SAW/SQR** (waveform)
+- every voice has subtle per-hit analog drift (pitch/timing/detune) so nothing
+  sounds robotic; **double-click any slider** to reset it
 - **tonal rows** BS (bass), **LD** (lead synth, A3), **PL** (pluck synth, A4) —
   drag a cell vertically or mouse-wheel to set pitch across a 4-octave range;
   write real 2-bar melodies over the 32 steps
@@ -45,15 +48,22 @@ or deploy the repo root to Vercel / any static host as-is.
 
 State autosaves to localStorage; a shared URL overrides it.
 
-## DJ decks — play & auto-mix whole tracks
+## DJ decks — a real AI DJ over your tracks
 
-Load your tracks into the **SMP POOL**, then:
+Load your tracks into the **SMP POOL** (multi-select or drag&drop). Each one is
+analyzed on load for **tempo, downbeat and loudness** — the detected BPM shows
+on the chip.
 
 - **▶ on a pool chip** — spin that whole track on a deck (full playback, not sliced)
-- **AUTOMIX** — auto-mix the entire pool like a DJ: tracks play back to back and
-  crossfade near each other's end with an equal-power volume blend + a bass
-  EQ-swap (outgoing bass out first, incoming bass in — the two never share the
-  low end). **XFD** sets the crossfade length (4/8/16 s); **STOP** clears the decks.
+- **AUTOMIX** — mixes the whole pool like a club DJ:
+  - **beatmatch** — every track is played at `playbackRate = mixTempo / trackTempo`
+    so all beats lock to one tempo — the **BPM slider**
+  - **phrase-align** — the next track is cued from its downbeat and dropped
+    exactly on the current track's next bar
+  - **level-match** — decks are trimmed to a common loudness, no volume jumps
+  - **EQ-swap crossfade** — a beat-synced blend (**XFD** = 4/8/16 bars) with an
+    equal-power volume fade + a bass swap so two low ends never clash
+- **STOP** clears the decks.
 
 Decks run through a glue compressor + limiter but skip the sequencer's sidechain
 and DJ filter, so you can jam the drum machine over your own tracks.
