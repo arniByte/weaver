@@ -14,6 +14,7 @@
 <header id="top">
   <div class="hrow">
     <div id="brand">WEAVER<span class="dim">/SEQ.02</span></div>
+    <span id="by">BY ARNI</span>
     <button id="play" title="space">&#9654;</button>
     <button id="auto" title="self-mixing dj set">AUTO</button>
     <button id="abars" title="bars per groove before AUTO changes the track">32BR</button>
@@ -40,6 +41,23 @@
 <main id="gridwrap">
   <div id="grid"></div>
   <div id="pool"></div>
+  <section id="decks">
+    <div class="dhead">
+      <span class="plabel">DJ DECKS</span>
+      <button id="automix" title="auto-mix the whole sample pool like a dj">AUTOMIX</button>
+      <button id="xfade" title="crossfade length">XFD 8S</button>
+      <button id="deckstop" title="stop decks">STOP</button>
+      <span id="deckstat" class="dim"></span>
+    </div>
+    <div class="deck" data-deck="0">
+      <span class="dl">A</span><span class="dn">—</span>
+      <div class="dbar"><i></i></div><span class="dt">0:00</span>
+    </div>
+    <div class="deck" data-deck="1">
+      <span class="dl">B</span><span class="dn">—</span>
+      <div class="dbar"><i></i></div><span class="dt">0:00</span>
+    </div>
+  </section>
 </main>
 
 <div id="wallwrap">
@@ -48,7 +66,7 @@
 
 <footer>
   <span>CLICK&thinsp;=&thinsp;STEP &middot; SHIFT+CLICK&thinsp;=&thinsp;ACCENT &middot; DRAG BS/SP CELL&thinsp;=&thinsp;PITCH/SLICE &middot; SPACE&thinsp;=&thinsp;RUN &middot; 1&ndash;5&thinsp;=&thinsp;PRESET &middot; A&thinsp;=&thinsp;AUTO</span>
-  <span class="dim">100% PROCEDURAL SYNTHESIS &middot; WEB AUDIO &middot; DROP AN AUDIO FILE FOR THE SP TRACK</span>
+  <span class="dim">WEAVER BY ARNI &middot; PROCEDURAL SYNTHESIS + YOUR TRACKS &middot; WEB AUDIO</span>
 </footer>
 
 <input id="file" type="file" accept="audio/*" multiple hidden>

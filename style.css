@@ -45,6 +45,14 @@ body {
 }
 
 #brand { font-size: 14px; color: #fff; letter-spacing: .3em; white-space: nowrap; }
+#by {
+  color: var(--acc);
+  font-size: 9px;
+  letter-spacing: .28em;
+  border: 1px solid var(--acc-dim);
+  padding: 3px 7px;
+  white-space: nowrap;
+}
 .dim { color: var(--dim); }
 .spacer { flex: 1; }
 
@@ -181,9 +189,62 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#pool .chipwrap { display: inline-flex; align-items: stretch; }
+#pool .chipwrap .play {
+  font-size: 10px;
+  padding: 4px 7px;
+  border-right: none;
+  color: var(--fg);
+}
+#pool .chipwrap .play.on { background: var(--acc); border-color: var(--acc); color: #000; }
+#pool .chip { border-left: none; }
+#pool .chipwrap .chip { border-left: 1px solid var(--line-hi); }
 #pool .chip.active { border-color: var(--acc); color: var(--acc); }
-#pool .chip.add { color: var(--dim); }
+#pool .chip.add { color: var(--dim); border-left: 1px solid var(--line-hi); }
 #pool .chip.add:hover { color: var(--acc); border-color: var(--acc); }
+
+/* ---------- dj decks ---------- */
+
+#decks {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#decks .dhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#decks .dhead .plabel { color: var(--dim); font-size: 10px; letter-spacing: .15em; }
+#decks button { font-size: 10px; padding: 4px 8px; }
+#automix.active { background: var(--acc); border-color: var(--acc); color: #000; }
+#deckstat { font-size: 9px; letter-spacing: .12em; }
+
+.deck {
+  display: grid;
+  grid-template-columns: 20px minmax(80px, 200px) 1fr 46px;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+.deck .dl { color: var(--dim); text-align: center; }
+.deck.live .dl { color: var(--acc); }
+.deck .dn {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deck.live .dn { color: #fff; }
+.deck .dbar { height: 6px; background: #0c0c0c; border: 1px solid var(--line); position: relative; }
+.deck .dbar i {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0%;
+  background: var(--acc-dim);
+  border-right: 1px solid var(--acc);
+}
+.deck.live .dbar i { background: linear-gradient(90deg, #06301a, var(--acc-dim)); }
+.deck .dt { color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
 
 .track.header { margin-bottom: 8px; }
 .track.header .idx {
@@ -306,4 +367,5 @@ footer {
   label.sl input[type=range] { width: 52px; }
   .cell .note { font-size: 7px; }
   footer { font-size: 8px; }
+  .deck { grid-template-columns: 18px minmax(60px, 110px) 1fr 40px; }
 }
