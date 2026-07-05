@@ -89,8 +89,7 @@ export class DeckPlayer {
     this.active = 0;
     const d = this.decks[0];
     const now = ctx.currentTime + 0.02;
-    this._load(d, idx, now);
-    this.engine.activeSample = idx;
+    this._load(d, idx, now);   // decks are independent of the SP track's activeSample
     d.gain.gain.cancelScheduledValues(now);
     d.gain.gain.setValueAtTime(0, now);
     d.gain.gain.linearRampToValueAtTime(0.9, now + 0.04);
@@ -122,10 +121,10 @@ export class DeckPlayer {
   _fadeIn(deck, idx) {
     const now = this.engine.ctx.currentTime + 0.02;
     this._load(deck, idx, now);
-    this.engine.activeSample = idx;
+    const fin = Math.min(1.0, deck.dur * 0.3);   // ease-in, shortened for tiny clips
     deck.gain.gain.cancelScheduledValues(now);
     deck.gain.gain.setValueAtTime(0, now);
-    deck.gain.gain.linearRampToValueAtTime(0.9, now + 1.0);   // 1 s ease-in
+    deck.gain.gain.linearRampToValueAtTime(0.9, now + fin);
     deck.low.gain.cancelScheduledValues(now);
     deck.low.gain.setValueAtTime(0, now);
     this.playlist = idx;
@@ -142,7 +141,6 @@ export class DeckPlayer {
     const xf = Math.max(1, Math.min(this.xfade, rem - 0.05, pool[nextIdx].buffer.duration * 0.4));
 
     this._load(to, nextIdx, now);
-    this.engine.activeSample = nextIdx;
     to.gain.gain.cancelScheduledValues(now);
     to.gain.gain.setValueCurveAtTime(CURVE_IN, now, xf);
     to.low.gain.cancelScheduledValues(now);
@@ -165,13 +163,16 @@ export class DeckPlayer {
   update() {
     if (!this.decks) return;
     const ctx = this.engine.ctx, now = ctx.currentTime;
-    for (const d of this.decks) if (d.playing && now >= d.startAt + d.dur - 0.02) d.playing = false;
+    let ended = false;
+    for (const d of this.decks) if (d.playing && now >= d.startAt + d.dur - 0.02) { d.playing = false; ended = true; }
+    if (ended) this._notify();   // repaint deck rows + pool when a track finishes
     if (!this.automix) return;
     if (!this.engine.samples.length) { this.automix = false; this._notify(); return; }
     if (now < this._xfadeEnd) return;
     const cur = this.decks[this.active];
     if (cur.playing) {
-      if (cur.startAt + cur.dur - now <= this.xfade + 0.05) this._beginCrossfade();
+      const trig = Math.min(this.xfade, cur.dur * 0.5);   // short tracks still play in isolation
+      if (cur.startAt + cur.dur - now <= trig + 0.05) this._beginCrossfade();
     } else {
       this._fadeIn(this.decks[this.active], (this.playlist + 1) % this.engine.samples.length);
       this._notify();
