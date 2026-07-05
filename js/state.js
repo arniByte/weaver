@@ -17,7 +17,7 @@ export const TRACKS = [
   { id: 'bass',  label: 'BS', modes: ['ACD', 'DEP', 'RSE'], params: [['cutoff', 'CUT'], ['res', 'RES'], ['decay', 'DEC']], notes: true, root: 33 },
   { id: 'lead',  label: 'LD', modes: ['SIN', 'TRI', 'SAW', 'SQR'], params: [['cutoff', 'CUT'], ['res', 'RES'], ['decay', 'DEC']], notes: true, root: 57 },
   { id: 'pluck', label: 'PL', modes: ['SIN', 'TRI', 'SAW', 'SQR'], params: [['cutoff', 'CUT'], ['res', 'RES'], ['decay', 'DEC']], notes: true, root: 69 },
-  { id: 'stab',  label: 'ST', params: [['chord', 'CHD'], ['cutoff', 'CUT'], ['decay', 'DEC']] },
+  { id: 'stab',  label: 'ST', modes: ['STB', 'CRD', 'PAD'], params: [['chord', 'CHD'], ['cutoff', 'CUT'], ['decay', 'DEC']] },
   { id: 'nse',   label: 'NS', params: [['tone', 'TON'], ['decay', 'DEC']] },
   { id: 'smp',   label: 'SP', params: [['tune', 'TUN'], ['ofs', 'OFS'], ['len', 'LEN'], ['decay', 'DEC']], slices: true },
 ];
@@ -94,18 +94,22 @@ export const PRESETS = {
     },
   },
   deep: {
-    bpm: 127, swing: 56, pump: .55,
+    bpm: 127, swing: 55, pump: .6,
     tracks: {
-      kick:  { steps: pat('X...X...X...X...'), mode: 1, params: { tune: .3, decay: .45, drive: .35 }, level: .95, send: .7 },
-      clap:  { steps: pat('....x.......x...'), params: { tone: .38, decay: .45 }, level: .42, send: .45 },
-      chh:   { steps: pat('..x...x...x...x.'), mode: 1, params: { tone: .42, decay: .32 }, level: .38 },
-      nse:   { steps: pat('x.x.x.x.x.x.x.x.'), params: { tone: .5, decay: .04 }, level: .14 },
-      bass:  { steps: pat('.xx..xx..xx..xx.'), notes: tile([0]), mode: 1,
-               params: { cutoff: .35, res: .5, decay: .45 }, level: .85, send: .3 },
-      pluck: { steps: pat('....x.......x.......x.......x....'), mode: 0,
-               notes: tile([_,_,_,_,12,_,_,_,_,_,_,_,7,_,_,_].map(v => v ?? 0)),
-               params: { cutoff: .5, res: .25, decay: .35 }, level: .4, send: .5 },
-      stab:  { steps: pat('..............x.'), params: { chord: .6, cutoff: .4, decay: .5 }, level: .4, send: .85 },
+      kick:  { steps: pat('X...X...X...X...'), mode: 1, params: { tune: .32, decay: .55, drive: .42 }, level: .95, send: .82 },
+      clap:  { steps: pat('....x.......x...'), params: { tone: .35, decay: .5 }, level: .34, send: .55 },
+      chh:   { steps: pat('..x...x...x...x.'), mode: 1, params: { tone: .4, decay: .3 }, level: .34 },
+      ohh:   { steps: pat('......x.......x.'), mode: 1, params: { tone: .45, decay: .5 }, level: .26, send: .3 },
+      nse:   { steps: pat('x.x.x.x.x.x.x.x.'), params: { tone: .5, decay: .04 }, level: .12 },
+      // rolling, moving deep sub — the DEP engine + high send builds the rumble
+      bass:  { steps: pat('.xx..x...xx..x..'), notes: tile([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, 0]), mode: 1,
+               params: { cutoff: .3, res: .55, decay: .5 }, level: .9, send: .35 },
+      // evolving dub pad (Am7) — one long chord per bar, drenched in reverb
+      stab:  { steps: pat('X...............'), mode: 2, params: { chord: 0, cutoff: .42, decay: .8 }, level: .42, send: .8 },
+      // sparse hypnotic motif
+      lead:  { steps: pat('........x...............x.......'), mode: 0,
+               notes: [_, _, _, _, _, _, _, _, 12, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, 10, _, _, _, _, _, _, _].map(v => v ?? 0),
+               params: { cutoff: .48, res: .3, decay: .45 }, level: .32, send: .55 },
     },
   },
   techno: {
@@ -119,7 +123,7 @@ export const PRESETS = {
       lead:  { steps: pat('..............x...............x.'), mode: 2,
                notes: tile([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),
                params: { cutoff: .4, res: .5, decay: .4 }, level: .4, send: .6 },
-      stab:  { steps: pat('..........x.....'), params: { chord: 1, cutoff: .45, decay: .3 }, level: .45, send: .7 },
+      stab:  { steps: pat('..........x.....'), mode: 1, params: { chord: 1, cutoff: .45, decay: .4 }, level: .45, send: .7 },
       nse:   { steps: pat('............x...'), params: { tone: .6, decay: .8 }, level: .22, send: .5 },
     },
   },

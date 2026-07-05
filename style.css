@@ -102,18 +102,19 @@ input[type=range] {
 label.bigsl input[type=range] { width: clamp(80px, 12vw, 150px); }
 label.sl input[type=range] { width: clamp(44px, 4.5vw, 64px); }
 
-input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--line-hi); }
+input[type=range]::-webkit-slider-runnable-track { height: 3px; background: var(--line-hi); }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 9px; height: 16px;
-  margin-top: -7px;
+  width: 11px; height: 18px;
+  margin-top: -8px;
   background: var(--fg);
+  transition: background .1s;
 }
 input[type=range]:active::-webkit-slider-thumb,
 input[type=range]:hover::-webkit-slider-thumb { background: var(--acc); }
-input[type=range]::-moz-range-track { height: 2px; background: var(--line-hi); }
+input[type=range]::-moz-range-track { height: 3px; background: var(--line-hi); }
 input[type=range]::-moz-range-thumb {
-  width: 9px; height: 16px;
+  width: 11px; height: 18px;
   border: none; border-radius: 0;
   background: var(--fg);
 }
@@ -203,6 +204,12 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
 #pool .chip { border-left: none; }
 #pool .chipwrap .chip { border-left: 1px solid var(--line-hi); }
 #pool .chip.active { border-color: var(--acc); color: var(--acc); }
+#pool .chip .bpm {
+  color: var(--acc);
+  margin-left: 6px;
+  font-size: 9px;
+  opacity: .85;
+}
 #pool .chip.add { color: var(--dim); border-left: 1px solid var(--line-hi); }
 #pool .chip.add:hover { color: var(--acc); border-color: var(--acc); }
 

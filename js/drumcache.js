@@ -41,6 +41,7 @@ export class DrumCache {
   }
 
   prime(id, p, mode = 0) {
+    if (!DUR[id]) return;          // only drum voices are cached
     this.get(id, p, 0.72, mode);
     this.get(id, p, 1, mode);
   }
