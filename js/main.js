@@ -8,9 +8,11 @@ import { Engine } from './engine.js';
 import { Viz } from './viz.js';
 import { LightWall } from './lightwall.js';
 import { AutoPilot } from './autopilot.js';
+import { DeckPlayer } from './deck.js';
 
 const state = loadInitialState();
 const engine = new Engine(state);
+const deck = new DeckPlayer(engine);
 const viz = new Viz(document.getElementById('viz'), engine, state);
 const wall = new LightWall(document.getElementById('wall'), engine);
 
@@ -418,17 +420,24 @@ function renderPool() {
   lab.className = 'plabel';
   lab.textContent = 'SMP POOL';
   poolBox.appendChild(lab);
+  const info = deck.info();
+  const liveIdx = info.decks[info.active]?.playing ? info.decks[info.active].idx : -1;
   engine.samples.forEach((s, i) => {
+    const wrap = document.createElement('span');
+    wrap.className = 'chipwrap';
+    const playing = i === liveIdx;
+    const play = document.createElement('button');
+    play.className = 'play' + (playing ? ' on' : '');
+    play.innerHTML = playing ? '&#9632;' : '&#9654;';
+    play.title = 'play this whole track (dj deck)';
+    play.addEventListener('click', () => { deck.playFull(i); renderPool(); renderTrack('smp'); });
     const b = document.createElement('button');
     b.className = 'chip' + (i === engine.activeSample ? ' active' : '');
     b.textContent = `${String(i + 1).padStart(2, '0')} ${s.name}`;
-    b.title = 'use this sample on the SP track';
-    b.addEventListener('click', () => {
-      engine.activeSample = i;
-      renderPool();
-      renderTrack('smp');
-    });
-    poolBox.appendChild(b);
+    b.title = 'use this sample on the SP sequencer track';
+    b.addEventListener('click', () => { engine.activeSample = i; renderPool(); renderTrack('smp'); });
+    wrap.append(play, b);
+    poolBox.appendChild(wrap);
   });
   const add = document.createElement('button');
   add.className = 'chip add';
@@ -436,6 +445,43 @@ function renderPool() {
   add.addEventListener('click', () => $('file').click());
   poolBox.appendChild(add);
 }
+
+// ---------- dj decks ----------
+
+deck.onChange = () => { renderDecks(); renderPool(); };
+
+const deckEls = [...document.querySelectorAll('.deck')].map(el => ({
+  root: el, name: el.querySelector('.dn'), bar: el.querySelector('.dbar i'), time: el.querySelector('.dt'),
+}));
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function renderDecks() {
+  const info = deck.info();
+  $('automix').classList.toggle('active', info.automix);
+  $('xfade').textContent = 'XFD ' + info.xfade + 'S';
+  info.decks.forEach((d, i) => {
+    const e = deckEls[i];
+    e.root.classList.toggle('live', d.playing);
+    e.name.textContent = d.name || '—';
+    e.bar.style.width = (d.dur ? (d.pos / d.dur) * 100 : 0) + '%';
+    e.time.textContent = d.dur ? fmtTime(d.pos) : '0:00';
+  });
+  if (!engine.samples.length) $('deckstat').textContent = 'LOAD TRACKS ABOVE';
+  else if (info.automix) $('deckstat').textContent = 'AUTO-MIXING POOL';
+  else $('deckstat').textContent = '';
+}
+
+$('automix').addEventListener('click', () => {
+  if (deck.automix) deck.stopAutomix();
+  else if (!deck.startAutomix()) $('deckstat').textContent = 'LOAD TRACKS FIRST';
+  renderDecks();
+});
+$('xfade').addEventListener('click', () => { deck.cycleXfade(); renderDecks(); });
+$('deckstop').addEventListener('click', () => { deck.stopAutomix(); deck.stopAll(0.1); renderDecks(); });
 
 async function loadSampleFiles(files) {
   engine.init();
@@ -447,6 +493,7 @@ async function loadSampleFiles(files) {
     } catch { /* undecodable file — skip */ }
   }
   renderPool();
+  renderDecks();
   renderTrack('smp');
 }
 
@@ -472,8 +519,13 @@ function dirty() {
 // ---------- render loop ----------
 
 let prevPh = -1;
+let deckTick = 0;
 function frame() {
   const step = engine.currentStep();
+  deck.update();
+  if (++deckTick % 6 === 0 && (deck.decks && (deck.decks[0].playing || deck.decks[1].playing))) {
+    renderDecks();   // progress bars ~10fps, cheap
+  }
   viz.draw();
   wall.draw(step);
   if (step !== prevPh) {
@@ -494,8 +546,9 @@ function frame() {
 
 buildGrid();
 renderPool();
+renderDecks();
 renderAll();
 saveLocal(state);   // persist whatever we booted from (incl. a shared URL)
 requestAnimationFrame(frame);
 
-window.__weaver = { engine, state, auto };   // console / testing handle
+window.__weaver = { engine, state, auto, deck };   // console / testing handle

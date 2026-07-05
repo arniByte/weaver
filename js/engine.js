@@ -82,6 +82,7 @@ export class Engine {
 
     this.duck = ctx.createGain();   // sidechain pump bus
     this.sum = ctx.createGain();
+    this.deckBus = ctx.createGain(); // full-track DJ decks feed here
 
     this.djLP = ctx.createBiquadFilter();
     this.djLP.type = 'lowpass';
@@ -96,6 +97,7 @@ export class Engine {
     this.sum.connect(this.djLP);
     this.djLP.connect(this.djHP);
     this.djHP.connect(this.comp);
+    this.deckBus.connect(this.comp);   // decks skip the sequencer duck + DJ filter
     this.comp.connect(this.limiter);
     this.limiter.connect(this.clip);
     this.clip.connect(this.master);
