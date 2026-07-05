@@ -138,18 +138,21 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
 
 .track {
   display: grid;
-  grid-template-columns: 38px minmax(0, 520px) 1fr;
-  gap: 4px 8px;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 430px);
+  gap: 4px 10px;
   align-items: center;
   margin-bottom: 4px;
 }
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 3px;
+  grid-template-columns: repeat(32, 1fr);
+  gap: 2px;
   position: relative;
 }
+/* beat + bar markers over 32 steps */
+.steps .cell:nth-child(4n+1) { border-left-color: var(--line-hi); }
+.steps .cell:nth-child(16n+1) { border-left: 1px solid #4a4a4a; }
 
 .dropzone {
   position: absolute;
@@ -248,12 +251,15 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
 
 .track.header { margin-bottom: 8px; }
 .track.header .idx {
-  text-align: center;
+  text-align: left;
   color: var(--dim);
-  font-size: 9px;
+  font-size: 8px;
+  overflow: visible;
+  white-space: nowrap;
 }
 .track.header .idx.beat { color: var(--fg); }
-.track.header .idx.ph { color: var(--acc); }
+.track.header .idx.bar { color: var(--acc); }
+.track.header .idx.ph { color: #fff; }
 
 .tlabel {
   border: none;
@@ -275,7 +281,6 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
   touch-action: manipulation;   /* plain cells must not block page scroll */
 }
 .cell.lane { touch-action: none; }  /* bass/sample cells: vertical drag edits value */
-.steps .cell:nth-child(4n+1) { border-left-color: var(--line-hi); }
 .cell:hover { border-color: var(--fg); }
 .cell.on { background: var(--on); border-color: var(--on); }
 .cell.acc { background: var(--acc); border-color: var(--acc); }
@@ -290,10 +295,11 @@ label.flt input[type=range]::-webkit-slider-runnable-track {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 8px;
+  font-size: 7px;
   letter-spacing: 0;
   color: var(--dim);
   pointer-events: none;
+  overflow: hidden;
 }
 .cell.on .note, .cell.acc .note { color: #000; }
 
@@ -349,23 +355,24 @@ footer {
 /* ---------- responsive ---------- */
 
 @media (max-width: 1080px) {
-  .track { grid-template-columns: 38px 1fr; }
+  .track { grid-template-columns: 34px 1fr; }
   .track .ctrls { grid-column: 2 / -1; }
   .track.header .hspacer { display: none; }
 }
 
 @media (max-width: 640px) {
   body { font-size: 11px; }
-  :root { --cell-h: 24px; }
+  :root { --cell-h: 22px; }
   #top { padding: 6px 8px; }
   .hrow { gap: 8px; }
-  #gridwrap { padding: 10px 8px 8px; }
-  .track { grid-template-columns: 30px 1fr; gap: 3px 6px; margin-bottom: 6px; }
-  .steps { gap: 2px; }
+  #gridwrap { padding: 10px 6px 8px; }
+  .track { grid-template-columns: 26px 1fr; gap: 3px 5px; margin-bottom: 6px; }
+  .steps { gap: 1px; }
   .track .ctrls { grid-column: 1 / -1; gap: 7px; }
   label.bigsl input[type=range] { width: clamp(64px, 22vw, 120px); }
   label.sl input[type=range] { width: 52px; }
-  .cell .note { font-size: 7px; }
+  .cell .note { font-size: 6px; }
+  .track.header .idx { font-size: 7px; }
   footer { font-size: 8px; }
   .deck { grid-template-columns: 18px minmax(60px, 110px) 1fr 40px; }
 }

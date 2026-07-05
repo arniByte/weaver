@@ -358,6 +358,50 @@ export function sample(ctx, out, t, p, vel, buffer, slice, stepDur) {
   return g;
 }
 
+// melodic lead / pluck — tonal, note-per-step, 4 selectable waveforms.
+// wave: 0 sine · 1 triangle · 2 saw · 3 square. `root` is the A note in Hz
+// (lead A3 = 220, pluck A4 = 440). saw/square get a detuned pair for width and
+// a resonant filter with a decay envelope so they read as a proper synth line.
+const WAVES = ['sine', 'triangle', 'sawtooth', 'square'];
+
+export function synth(ctx, out, t, p, vel, note, stepDur, wave, root) {
+  const f = root * Math.pow(2, note / 12);
+  const type = WAVES[wave] || 'sine';
+  const rich = wave >= 2;                              // saw / square
+  const gate = stepDur * (0.35 + p.decay * 3.0);
+  const rel = 0.05;
+  const accent = vel > 0.9;
+
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  const fc = 140 * Math.pow(2, p.cutoff * 5.6);        // 140..6700 Hz
+  lp.frequency.setValueAtTime(Math.min(fc * (accent ? 2.6 : 1.9) + f * 3, 13000), t);
+  lp.frequency.setTargetAtTime(fc, t, 0.03 + p.decay * 0.22);
+  lp.Q.value = p.res * (accent ? 18 : 13);
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vel * 0.5, t + 0.006);
+  g.gain.setValueAtTime(vel * 0.5, t + gate);
+  g.gain.exponentialRampToValueAtTime(0.001, t + gate + rel);
+  g.gain.linearRampToValueAtTime(0, t + gate + rel + 0.01);
+
+  const stop = t + gate + rel + 0.02;
+  const dets = rich ? [-7, 7] : [0];
+  for (const d of dets) {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = f;
+    o.detune.value = d;
+    const og = ctx.createGain();
+    og.gain.value = rich ? 0.5 : 0.85;
+    o.connect(og).connect(lp);
+    o.start(t); o.stop(stop);
+  }
+  lp.connect(g).connect(out);
+  return g;   // engine chokes the previous note → mono melodic line
+}
+
 const ROOT_STAB = 220;  // A3
 const CHORDS = [
   [0, 3, 7, 10],     // Am7

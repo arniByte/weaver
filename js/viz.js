@@ -1,6 +1,8 @@
 // viz.js — data-plot style visualization: live waveform over a dim spectrum,
 // micro grid, playhead column, numeric readouts. Black field, 1px lines.
 
+import { STEPS, BAR } from './state.js';
+
 export class Viz {
   constructor(canvas, engine, state) {
     this.canvas = canvas;
@@ -35,10 +37,16 @@ export class Viz {
     g.strokeStyle = '#141414';
     g.lineWidth = 1;
     g.beginPath();
-    for (let i = 1; i < 16; i++) {
-      const x = Math.round(i * W / 16) + 0.5;
+    for (let i = 1; i < STEPS; i++) {           // a line per beat (every 4 steps)
+      if (i % 4) continue;
+      const x = Math.round(i * W / STEPS) + 0.5;
       g.moveTo(x, 0); g.lineTo(x, H);
     }
+    g.stroke();
+    g.strokeStyle = '#242424';                  // brighter line at the bar split
+    g.beginPath();
+    const bx = Math.round(BAR * W / STEPS) + 0.5;
+    g.moveTo(bx, 0); g.lineTo(bx, H);
     g.stroke();
     g.strokeStyle = '#1e1e1e';
     g.beginPath();
@@ -82,9 +90,9 @@ export class Viz {
 
     // playhead column
     if (step >= 0) {
-      const x0 = step * W / 16;
+      const x0 = step * W / STEPS;
       g.fillStyle = 'rgba(0,255,65,0.05)';
-      g.fillRect(x0, 0, W / 16, H);
+      g.fillRect(x0, 0, W / STEPS, H);
       g.strokeStyle = '#00ff41';
       g.beginPath();
       const x = Math.round(x0) + 0.5;
@@ -104,7 +112,7 @@ export class Viz {
     g.fillText(info, W - 6 * dpr, 5 * dpr);
     if (step >= 0) {
       g.fillStyle = '#00ff41';
-      g.fillText(`STEP ${String(step + 1).padStart(2, '0')}/16`, W - 6 * dpr, H - fs - 5 * dpr);
+      g.fillText(`STEP ${String(step + 1).padStart(2, '0')}/${STEPS}`, W - 6 * dpr, H - fs - 5 * dpr);
     }
     g.textAlign = 'left';
   }

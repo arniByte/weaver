@@ -11,7 +11,7 @@
 // Drum hits come from the pre-rendered DrumCache when available (cheap buffer
 // playback — the mobile crackle fix); unknown param combos synthesize live once.
 
-import { TRACKS, STEPS } from './state.js';
+import { TRACKS, STEPS, BAR } from './state.js';
 import * as V from './voices.js';
 import { DrumCache, CACHED_DRUMS } from './drumcache.js';
 
@@ -38,6 +38,8 @@ export class Engine {
     this._lastStep = 0;
     this._openHats = [];
     this._lastBass = null;
+    this._lastLead = null;
+    this._lastPluck = null;
     this._lastSmp = null;
   }
 
@@ -261,7 +263,8 @@ export class Engine {
     const horizon = this.ctx.currentTime + SCHEDULE_AHEAD;
     while (this._nextTime < horizon) {
       const s = this.state;
-      if (this._step === 0 && this.onBar) this.onBar(this._bar++, this._nextTime);
+      // fire the autopilot clock once per musical bar (16 steps), not per 2-bar loop
+      if (this._step % BAR === 0 && this.onBar) this.onBar(this._bar++, this._nextTime);
       const sixteenth = 60 / s.bpm / 4;
       let t = this._nextTime;
       if (this._step % 2 === 1) t += sixteenth * (s.swing - 50) / 50; // MPC-style swing on odd 16ths
@@ -308,6 +311,16 @@ export class Engine {
         case 'bass': {
           if (this._lastBass) this._chokeGain(this._lastBass, t);
           this._lastBass = V.bass(ctx, out, t, p, vel, tr.notes[step], sixteenth, tr.mode || 0);
+          break;
+        }
+        case 'lead': {
+          if (this._lastLead) this._chokeGain(this._lastLead, t);
+          this._lastLead = V.synth(ctx, out, t, p, vel, tr.notes[step], sixteenth, tr.mode || 0, 220);
+          break;
+        }
+        case 'pluck': {
+          if (this._lastPluck) this._chokeGain(this._lastPluck, t);
+          this._lastPluck = V.synth(ctx, out, t, p, vel, tr.notes[step], sixteenth, tr.mode || 0, 440);
           break;
         }
         case 'stab': V.stab(ctx, out, t, p, vel); break;

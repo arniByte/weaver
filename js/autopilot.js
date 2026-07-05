@@ -10,31 +10,24 @@
 //   · energy arc: deep start → build → peak → contrast → release
 //   · user samples: rotated in and out of scenes as sliced textures
 
-import { PRESETS, defaultState, randomize } from './state.js';
+import { PRESETS, defaultState, randomize, tile, STEPS, BAR } from './state.js';
 
 const ARC = ['deep', 'house', 'house', 'deep', 'techno', 'techno', 'edm', 'techno', 'dnb', 'dnb', 'house'];
 const TRANS_BARS = 8;
-const HALFTIME = [0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]; // snare on beat 3 only
+// snare on beat 3 of every bar (steps 8 and 24) — the halftime feel
+const HALFTIME = (() => { const a = new Array(STEPS).fill(0); for (let i = 8; i < STEPS; i += BAR) a[i] = 2; return a; })();
 
-// Curated slice patterns for the user-sample track (steps + slice per step).
+// Curated slice patterns for the user-sample track (one bar, tiled to 2 bars).
 const SP_PATTERNS = [
-  { // straight resequence — the loop, locked to the grid
-    steps: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    slices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-  },
-  { // 8th-note chop, ordered
-    steps: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    slices: [0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14],
-  },
-  { // syncopated chop
-    steps: [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1],
-    slices: [0, 0, 0, 3, 0, 0, 6, 0, 0, 0, 10, 0, 12, 0, 0, 15],
-  },
-  { // stutter: one slice hammered on the back half
-    steps: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1],
-    slices: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  },
-];
+  { steps: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    slices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
+  { steps: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    slices: [0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14] },
+  { steps: [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1],
+    slices: [0, 0, 0, 3, 0, 0, 6, 0, 0, 0, 10, 0, 12, 0, 0, 15] },
+  { steps: [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    slices: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] },
+].map(p => ({ steps: tile(p.steps, STEPS), slices: tile(p.slices, STEPS) }));
 
 export class AutoPilot {
   constructor(state, engine, ui) {   // ui: { refresh(), status(text) }
@@ -162,19 +155,20 @@ export class AutoPilot {
     do { pick = Math.floor(Math.random() * 4); } while (pick === this._lastVar);
     this._lastVar = pick;
     if (pick === 0) {
-      // toggle an offbeat open hat
-      const i = [2, 6, 10, 14][Math.floor(Math.random() * 4)];
+      // toggle an offbeat open hat somewhere across the 2 bars
+      const i = 2 + 4 * Math.floor(Math.random() * (STEPS / 4));
       s.tracks.ohh.steps[i] = s.tracks.ohh.steps[i] ? 0 : 1;
     } else if (pick === 1) {
-      // delay throw on the stab (or clap) for one bar
-      const id = s.tracks.stab.steps.some(v => v) ? 'stab' : 'clap';
+      // delay throw on the lead / stab / clap for one bar
+      const cand = ['lead', 'stab', 'clap'].filter(id => s.tracks[id] && s.tracks[id].steps.some(v => v));
+      const id = cand[Math.floor(Math.random() * cand.length)] || 'clap';
       const prev = s.tracks[id].send;
       s.tracks[id].send = Math.min(1, prev + 0.35);
       this.engine.applyMix(id);
       this._after(1, () => { s.tracks[id].send = prev; this.engine.applyMix(id); });
     } else if (pick === 2) {
       // hat density: add/remove a 16th
-      const i = [1, 3, 5, 7, 9, 11, 13, 15][Math.floor(Math.random() * 8)];
+      const i = 1 + 2 * Math.floor(Math.random() * (STEPS / 2));
       s.tracks.chh.steps[i] = s.tracks.chh.steps[i] ? 0 : 1;
     } else {
       this._subtleDrift();
@@ -193,14 +187,17 @@ export class AutoPilot {
   }
 
   _fill() {
-    // snare/clap roll over the back half of the bar
+    // snare/clap roll over the last quarter of the 2-bar pattern (steps 24..31)
     const s = this.state;
     const id = this.cur() === 'dnb' ? 'snare' : (s.tracks.clap.steps.some(v => v) ? 'clap' : 'snare');
     const tr = s.tracks[id];
     const prevSteps = tr.steps.slice();
     const prevMute = tr.mute;
     tr.mute = false;
-    tr.steps = prevSteps.slice(0, 8).concat([0, 0, 1, 0, 1, 1, 2, 2]);
+    const roll = tr.steps.slice();
+    const tail = [0, 0, 1, 0, 1, 1, 2, 2];
+    for (let i = 0; i < tail.length; i++) roll[STEPS - tail.length + i] = tail[i];
+    tr.steps = roll;
     this.engine.applyMix(id);
     this._after(1, () => {
       // tr may have been replaced by an adopt; restore only if it's still ours
@@ -260,7 +257,7 @@ export class AutoPilot {
     const nse = this.state.tracks.nse;
     const prev = { steps: nse.steps.slice(), params: { ...nse.params }, level: nse.level, send: nse.send, mute: nse.mute };
     nse.mute = false;
-    nse.steps = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1];
+    nse.steps = tile([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1], STEPS);
     nse.params = { tone: 0.65, decay: 0.85 };
     nse.level = 0.3;
     nse.send = 0.55;
@@ -284,7 +281,7 @@ export class AutoPilot {
 
   _finishTransition(B) {
     const t = PRESETS[B];
-    this._adopt(B, ['kick', 'bass', 'snare', 'clap', 'chh', 'ohh', 'stab', 'nse']); // the drop: full new groove
+    this._adopt(B, ['kick', 'bass', 'snare', 'clap', 'chh', 'ohh', 'lead', 'pluck', 'stab', 'nse']); // the drop: full new groove
     this._setBpm(t.bpm);
     this.state.swing = t.swing;
     this.state.pump = t.pump;
@@ -307,8 +304,8 @@ export class AutoPilot {
     this._setBpm(from + (to - from) * Math.min(1, (b + 1) / TRANS_BARS));
     this.state.swing = Math.round(PRESETS[A].swing + (PRESETS[B].swing - PRESETS[A].swing) * Math.min(1, (b + 1) / TRANS_BARS));
 
-    if (b === 0) this._adopt(B, ['chh', 'ohh']);          // percussion first
-    else if (b === 2) this._adopt(B, ['stab', 'nse']);    // melodic identity
+    if (b === 0) this._adopt(B, ['chh', 'ohh']);                  // percussion first
+    else if (b === 2) this._adopt(B, ['stab', 'nse', 'lead', 'pluck']); // melodic identity
     else if (b === 4) this._adopt(B, ['snare', 'clap']);  // backbeat
     else if (b === 5) {
       this._setFilter(0.12);                              // thin the blend out…
@@ -351,7 +348,7 @@ export class AutoPilot {
       this._setFilter(-0.5);
     } else if (b === 4) {
       this._setBpm(PRESETS[B].bpm);                       // silent retempo
-      this._adopt(B, ['chh', 'ohh', 'stab']);
+      this._adopt(B, ['chh', 'ohh', 'stab', 'lead', 'pluck']);
       if (B === 'dnb') {                                  // entering 174: halftime snare
         const sn = this._trackFrom(B, 'snare');
         sn.steps = HALFTIME.slice();
