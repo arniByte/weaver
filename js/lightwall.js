@@ -8,6 +8,8 @@
 // The persistence trail (a translucent black fill each frame) is what turns the
 // additive draws into glow.
 
+import { STEPS } from './state.js';
+
 export class LightWall {
   constructor(canvas, engine) {
     this.canvas = canvas;
@@ -142,7 +144,7 @@ export class LightWall {
 
     if (step >= 0) {
       g.fillStyle = 'rgba(0,255,65,0.05)';
-      g.fillRect(step * W / 16, 0, W / 16, H);
+      g.fillRect(step * W / STEPS, 0, W / STEPS, H);
     }
 
     if (this.freq) {

@@ -1,7 +1,7 @@
 // main.js — builds the sequencer UI and wires it to the engine.
 
 import {
-  TRACKS, STEPS, PRESET_ORDER, applyPreset, randomize,
+  TRACKS, STEPS, BAR, NOTE_LO, NOTE_HI, PRESET_ORDER, applyPreset, randomize,
   serialize, saveLocal, loadInitialState,
 } from './state.js';
 import { Engine } from './engine.js';
@@ -18,11 +18,12 @@ const wall = new LightWall(document.getElementById('wall'), engine);
 
 const $ = id => document.getElementById(id);
 const grid = $('grid');
+const TRACK_DEF = Object.fromEntries(TRACKS.map(t => [t.id, t]));
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-function noteLabel(offset) {
-  const midi = 33 + offset; // A1 root
-  return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
+function noteLabel(offset, root) {
+  const midi = root + offset;
+  return NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
 }
 
 const pct = v => String(Math.round(v * 99)).padStart(2, '0');
@@ -39,8 +40,8 @@ function buildGrid() {
   head.appendChild(div(''));
   const idxWrap = div('steps');
   for (let i = 0; i < STEPS; i++) {
-    const d = div('idx' + (i % 4 === 0 ? ' beat' : ''));
-    d.textContent = String(i + 1).padStart(2, '0');
+    const d = div('idx' + (i % BAR === 0 ? ' bar' : i % 4 === 0 ? ' beat' : ''));
+    if (i % 4 === 0) d.textContent = String(i + 1).padStart(2, '0');  // number on beats only
     idxWrap.appendChild(d);
     headerIdx[i] = d;
   }
@@ -174,7 +175,7 @@ function tapCell(id, i, accent) {
 // bass / sample cells: click toggles, vertical drag (or wheel) edits the lane value
 function laneAccess(t) {
   return t.notes
-    ? { get: (tr, i) => tr.notes[i], set: (tr, i, v) => { tr.notes[i] = v; }, lo: -12, hi: 12, step: 7 }
+    ? { get: (tr, i) => tr.notes[i], set: (tr, i, v) => { tr.notes[i] = v; }, lo: NOTE_LO, hi: NOTE_HI, step: 6 }
     : { get: (tr, i) => tr.slices[i], set: (tr, i, v) => { tr.slices[i] = v; }, lo: 0, hi: 15, step: 9 };
 }
 
@@ -226,7 +227,7 @@ function renderCell(id, i) {
   if (tr.notes || tr.slices) {
     const n = c.querySelector('.note');
     n.textContent = v
-      ? (tr.notes ? noteLabel(tr.notes[i]) : String(tr.slices[i] + 1).padStart(2, '0'))
+      ? (tr.notes ? noteLabel(tr.notes[i], TRACK_DEF[id].root) : String(tr.slices[i] + 1).padStart(2, '0'))
       : '';
   }
 }

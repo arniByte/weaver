@@ -2,10 +2,11 @@
 
 by arni · [weaver-vert.vercel.app](https://weaver-vert.vercel.app/)
 
-Minimal browser groovebox + DJ tool. Black field, micro type, one bar of
-sixteen steps — house, deep techno, techno, edm, dnb.
+Minimal browser groovebox + DJ tool. Black field, micro type, **two bars of
+sixteenth steps (32)** — house, deep techno, techno, edm, dnb.
 
-Everything the machine makes is synthesized live in the Web Audio API. No
+Everything the machine makes is synthesized live in the Web Audio API — drums,
+a 3-mode bass, and two tonal **synths** (lead + pluck, four waveforms each). No
 samples, no dependencies, no build step. Load your own tracks to slice them on
 the SP sequencer row **and** to play/auto-mix them whole on the DJ decks.
 
@@ -25,8 +26,10 @@ or deploy the repo root to Vercel / any static host as-is.
   per groove before AUTO changes the track (16/32/48/64)
 - **click** a cell — toggle step; **shift+click** — accent (louder, brighter)
 - **sound engines** (mode button per track): BD 909/808/HRD · SD CLS/RIM ·
-  CH+OH MTL/NSE · BS ACD/DEP/RSE
-- **BS row** — drag a cell vertically (or wheel) to set pitch
+  CH+OH MTL/NSE · BS ACD/DEP/RSE · **LD / PL SIN/TRI/SAW/SQR** (waveform)
+- **tonal rows** BS (bass), **LD** (lead synth, A3), **PL** (pluck synth, A4) —
+  drag a cell vertically or mouse-wheel to set pitch across a 4-octave range;
+  write real 2-bar melodies over the 32 steps
 - **SP row + SMP POOL** — load any number of your own audio files (button or
   drag&drop); each is sliced into 16 pieces, drag a cell to pick the slice,
   TUN/OFS/LEN/DEC shape it; in AUTO mode the pool is rotated into the set
