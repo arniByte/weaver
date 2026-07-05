@@ -27,8 +27,8 @@ export class Engine {
     this.state = state;
     this.ctx = null;
     this.running = false;
-    this.sample = null;          // user AudioBuffer
-    this.sampleName = '';
+    this.samples = [];           // user pool: {name, buffer}
+    this.activeSample = -1;
     this.onBar = null;           // (barIndex, barTime) → autopilot hook
     this._timer = null;
     this._step = 0;
@@ -204,10 +204,14 @@ export class Engine {
     this.djHP.frequency.setTargetAtTime(hp, now, 0.05);
   }
 
-  setSample(buffer, name) {
-    this.sample = buffer;
-    this.sampleName = name;
+  addSample(buffer, name) {
+    this.samples.push({ buffer, name });
+    this.activeSample = this.samples.length - 1;
+    return this.activeSample;
   }
+
+  get sample() { return this.samples[this.activeSample]?.buffer || null; }
+  get sampleName() { return this.samples[this.activeSample]?.name || ''; }
 
   updateDelayTime() {
     if (!this.ctx) return;
@@ -219,7 +223,10 @@ export class Engine {
 
   primeDrums() {
     if (!this.drums) return;
-    for (const id of CACHED_DRUMS) this.drums.prime(id, this.state.tracks[id].params);
+    for (const id of CACHED_DRUMS) {
+      const tr = this.state.tracks[id];
+      this.drums.prime(id, tr.params, tr.mode || 0);
+    }
   }
 
   // ---------- transport ----------
@@ -273,21 +280,23 @@ export class Engine {
       const vel = v === 2 ? 1 : 0.72;
       const out = this.trackIn[trk.id];
       const p = tr.params;
+      const mode = tr.mode || 0;
+      const jit = 0.9 + Math.random() * 0.2;   // hats/perc humanization
       switch (trk.id) {
         case 'kick':
-          this._drum('kick', t, p, vel);
+          this._drum('kick', t, p, vel, mode);
           this._duck(t);
           break;
-        case 'snare': this._drum('snare', t, p, vel); break;
+        case 'snare': this._drum('snare', t, p, vel, mode); break;
         case 'clap':  this._drum('clap', t, p, vel); break;
-        case 'nse':   this._drum('nse', t, p, vel); break;
+        case 'nse':   this._drum('nse', t, p, vel, 0, jit); break;
         case 'chh':
           this._chokeOpenHats(t);
-          this._drum('chh', t, p, vel);
+          this._drum('chh', t, p, vel, mode, jit);
           break;
         case 'ohh': {
           this._chokeOpenHats(t);
-          const g = this._drum('ohh', t, p, vel);
+          const g = this._drum('ohh', t, p, vel, mode, jit);
           if (g) {
             this._openHats.push(g);
             if (this._openHats.length > 4) this._openHats.shift();
@@ -312,25 +321,26 @@ export class Engine {
 
   // Cached-buffer drum hit; falls back to live synthesis while a render is
   // pending. Returns a gain node for chokeable voices (open hat).
-  _drum(id, t, p, vel) {
+  _drum(id, t, p, vel, mode = 0, jitter = 1) {
     const ctx = this.ctx;
     const out = this.trackIn[id];
-    const buf = this.drums.get(id, p, vel);
+    const buf = this.drums.get(id, p, vel, mode);
     if (buf) {
       const src = ctx.createBufferSource();
       src.buffer = buf;
       const g = ctx.createGain();
+      g.gain.value = jitter;
       src.connect(g).connect(out);
       src.start(t);
       return g;
     }
     switch (id) {
-      case 'kick':  V.kick(ctx, out, t, p, vel); return null;
-      case 'snare': V.snare(ctx, out, t, p, vel); return null;
+      case 'kick':  V.kick(ctx, out, t, p, vel, mode); return null;
+      case 'snare': V.snare(ctx, out, t, p, vel, mode); return null;
       case 'clap':  V.clap(ctx, out, t, p, vel); return null;
-      case 'nse':   V.sweep(ctx, out, t, p, vel); return null;
-      case 'chh':   V.hat(ctx, out, t, p, vel, false); return null;
-      case 'ohh':   return V.hat(ctx, out, t, p, vel, true);
+      case 'nse':   V.sweep(ctx, out, t, p, vel * jitter); return null;
+      case 'chh':   V.hat(ctx, out, t, p, vel * jitter, false, mode); return null;
+      case 'ohh':   return V.hat(ctx, out, t, p, vel * jitter, true, mode);
     }
     return null;
   }
