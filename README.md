@@ -1,11 +1,13 @@
 # WEAVER
 
-Minimal browser groovebox / DJ sketchpad. Black field, micro type, one bar of
+by arni · [weaver-vert.vercel.app](https://weaver-vert.vercel.app/)
+
+Minimal browser groovebox + DJ tool. Black field, micro type, one bar of
 sixteen steps — house, deep techno, techno, edm, dnb.
 
-Everything you hear is synthesized live in the Web Audio API. No samples,
-no dependencies, no build step. Load your own audio onto the SP track and
-re-sequence it in 16 slices.
+Everything the machine makes is synthesized live in the Web Audio API. No
+samples, no dependencies, no build step. Load your own tracks to slice them on
+the SP sequencer row **and** to play/auto-mix them whole on the DJ decks.
 
 ## Run
 
@@ -40,6 +42,19 @@ or deploy the repo root to Vercel / any static host as-is.
 
 State autosaves to localStorage; a shared URL overrides it.
 
+## DJ decks — play & auto-mix whole tracks
+
+Load your tracks into the **SMP POOL**, then:
+
+- **▶ on a pool chip** — spin that whole track on a deck (full playback, not sliced)
+- **AUTOMIX** — auto-mix the entire pool like a DJ: tracks play back to back and
+  crossfade near each other's end with an equal-power volume blend + a bass
+  EQ-swap (outgoing bass out first, incoming bass in — the two never share the
+  low end). **XFD** sets the crossfade length (4/8/16 s); **STOP** clears the decks.
+
+Decks run through a glue compressor + limiter but skip the sequencer's sidechain
+and DJ filter, so you can jam the drum machine over your own tracks.
+
 ## AUTO mode
 
 A bar-clock state machine that mixes the set like a club DJ: phrase-locked
@@ -59,3 +74,7 @@ bridges into and out of 174 BPM dnb.
   ducked) — the classic deep-techno rumble bed
 - tempo-synced dotted-eighth ping-pong delay + procedural convolution reverb
 - open hats choked by closed hats; bass and sampler are true mono lines
+- DJ decks: buffer playback → highpass → bass-shelf EQ → gain → glue/limiter,
+  equal-power + EQ-swap crossfades for auto-mixing
+- bottom light wall: additive bloom field driven by three analyser bands +
+  kick onsets, over a persistence trail
