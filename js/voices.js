@@ -225,6 +225,7 @@ export function bass(ctx, out, t, p, vel, note, stepDur, mode = 0) {
   const saw = ctx.createOscillator();
   saw.type = 'sawtooth';
   saw.frequency.value = f;
+  saw.detune.value = (Math.random() * 2 - 1) * 6;      // analog drift
   const sub = ctx.createOscillator();
   sub.type = 'sine';
   sub.frequency.value = f;
@@ -233,7 +234,7 @@ export function bass(ctx, out, t, p, vel, note, stepDur, mode = 0) {
 
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  const fc = 60 * Math.pow(2, p.cutoff * 6);           // 60..3840 Hz
+  const fc = 60 * Math.pow(2, p.cutoff * 6) * (1 + (Math.random() * 2 - 1) * 0.04);  // 60..3840 Hz + jitter
   const accent = vel > 0.9;
   const peak = Math.min(fc * (accent ? 3.2 : 2.1) + f * 2, 9000);
   lp.frequency.setValueAtTime(peak, t);
@@ -256,36 +257,66 @@ export function bass(ctx, out, t, p, vel, note, stepDur, mode = 0) {
   return g; // engine chokes the previous note → true mono acid line
 }
 
-// deep techno / deep house: pure sub with a pitch thump, tanh saturation for
-// audible harmonics, lowpass to tame them. RES maps to drive. High FX send
-// turns this into the classic reverb-rumble bed under the kick.
+// deep techno / deep house: a fat, living sub. A clean sine sub for weight, a
+// detuned saw growl through a moving resonant lowpass for harmonics, tanh
+// saturation for body, and a slow filter LFO so the note breathes. RES = drive.
+// High FX send turns this into the classic reverb-rumble bed under the kick.
 function bassDeep(ctx, out, t, p, vel, f, stepDur) {
   const gate = stepDur * (0.6 + p.decay * 2.6);
-  const rel = 0.07;
+  const rel = 0.08;
+  const stop = t + gate + rel + 0.03;
+  const drift = () => (Math.random() * 2 - 1) * 6;   // analog cents
 
-  const osc = ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(f * 2.2, t);
-  osc.frequency.exponentialRampToValueAtTime(f, t + 0.05);
+  // clean sub — weight (bypasses the growl filter)
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(f * 2.0, t);
+  sub.frequency.exponentialRampToValueAtTime(f, t + 0.05);
+  const subG = ctx.createGain();
+  subG.gain.value = 0.9;
 
-  const sh = ctx.createWaveShaper();
-  sh.curve = satCurve(1 + p.res * 7);
-  sh.oversample = '2x';
-
+  // growl — a detuned saw pair, saturated, through a moving lowpass
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = 55 * Math.pow(2, p.cutoff * 4.5);   // 55..1245 Hz
-  lp.Q.value = 2;
+  const fc = 70 * Math.pow(2, p.cutoff * 4.6);        // 70..1700 Hz
+  lp.frequency.value = fc;
+  lp.Q.value = 3 + p.res * 6;
+
+  // slow filter LFO for movement
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.15 + Math.random() * 0.2;
+  const lfoG = ctx.createGain();
+  lfoG.gain.value = fc * 0.4;
+  lfo.connect(lfoG).connect(lp.frequency);
+
+  const sh = ctx.createWaveShaper();
+  sh.curve = satCurve(2 + p.res * 8);
+  sh.oversample = '2x';
+  const growlG = ctx.createGain();
+  growlG.gain.value = 0.5;
 
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(vel * 0.72, t + 0.006);
-  g.gain.setValueAtTime(vel * 0.72, t + gate);
+  g.gain.linearRampToValueAtTime(vel * 0.7, t + 0.006);
+  g.gain.setValueAtTime(vel * 0.7, t + gate);
   g.gain.exponentialRampToValueAtTime(0.001, t + gate + rel);
   g.gain.linearRampToValueAtTime(0, t + gate + rel + 0.01);
 
-  osc.connect(sh).connect(lp).connect(g).connect(out);
-  osc.start(t); osc.stop(t + gate + rel + 0.02);
+  for (const det of [-6, 8]) {
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = f;
+    o.detune.value = det + drift();
+    o.connect(sh);
+    o.start(t); o.stop(stop);
+  }
+  sh.connect(lp).connect(growlG).connect(g);
+  sub.connect(subG).connect(g);
+  g.connect(out);
+
+  sub.start(t); sub.stop(stop);
+  lfo.start(t); lfo.stop(stop);
   return g;
 }
 
@@ -392,7 +423,7 @@ export function synth(ctx, out, t, p, vel, note, stepDur, wave, root) {
     const o = ctx.createOscillator();
     o.type = type;
     o.frequency.value = f;
-    o.detune.value = d;
+    o.detune.value = d + (Math.random() * 2 - 1) * 5;   // analog drift
     const og = ctx.createGain();
     og.gain.value = rich ? 0.5 : 0.85;
     o.connect(og).connect(lp);
@@ -411,32 +442,53 @@ const CHORDS = [
 ];
 export const CHORD_NAMES = ['Am7', 'Fma7', 'Dm7', 'Em7'];
 
-export function stab(ctx, out, t, p, vel) {
+// mode 0 STB: short stab · 1 CRD: sustained dub chord · 2 PAD: long evolving pad.
+// CRD/PAD soften the attack, widen the detune and open the filter slowly so the
+// chord breathes — the atmospheric layer deep techno lives on (use a big FX send).
+export function stab(ctx, out, t, p, vel, mode = 0, stepDur = 0.12) {
   const chord = CHORDS[Math.min(3, Math.floor(p.chord * 4))];
-  const dec = 0.1 + p.decay * 0.7;
+  const long = mode === 2;
+  const sustained = mode >= 1;
+  const dec = sustained
+    ? stepDur * (long ? 6 + p.decay * 14 : 2 + p.decay * 6)
+    : 0.1 + p.decay * 0.7;
+  const atk = long ? 0.08 + p.decay * 0.4 : sustained ? 0.02 : 0.003;
+  const spread = long ? 14 : sustained ? 9 : 6;
+  const peak = vel * (long ? 0.34 : sustained ? 0.38 : 0.4);
+
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
   const fc = 300 * Math.pow(2, p.cutoff * 4.2);        // 300..5514 Hz
-  lp.frequency.setValueAtTime(Math.min(fc * 2, 11000), t);
-  lp.frequency.setTargetAtTime(fc * 0.7, t + 0.01, 0.12);
-  lp.Q.value = 4;
+  if (long) {                                          // slow filter open
+    lp.frequency.setValueAtTime(fc * 0.4, t);
+    lp.frequency.linearRampToValueAtTime(Math.min(fc * 1.4, 9000), t + dec * 0.7);
+  } else {
+    lp.frequency.setValueAtTime(Math.min(fc * 2, 11000), t);
+    lp.frequency.setTargetAtTime(fc * 0.7, t + 0.01, 0.12);
+  }
+  lp.Q.value = long ? 2 : 4;
 
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(vel * 0.4, t + 0.003);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dec);
-  g.gain.linearRampToValueAtTime(0, t + dec + 0.02);
+  g.gain.linearRampToValueAtTime(peak, t + atk);
+  if (sustained) {
+    g.gain.setValueAtTime(peak, t + dec * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dec);
+  } else {
+    g.gain.exponentialRampToValueAtTime(0.001, t + dec);
+  }
+  g.gain.linearRampToValueAtTime(0, t + dec + 0.03);
   lp.connect(g).connect(out);
 
-  const stop = t + dec + 0.03;
+  const stop = t + dec + 0.05;
   for (const semi of chord) {
-    for (const det of [-6, 6]) {                        // ± cents
+    for (const det of [-spread, spread]) {
       const o = ctx.createOscillator();
       o.type = 'sawtooth';
       o.frequency.value = ROOT_STAB * Math.pow(2, semi / 12);
-      o.detune.value = det;
+      o.detune.value = det + (Math.random() * 2 - 1) * 4;
       const og = ctx.createGain();
-      og.gain.value = 0.14;
+      og.gain.value = long ? 0.1 : 0.14;
       o.connect(og).connect(lp);
       o.start(t); o.stop(stop);
     }

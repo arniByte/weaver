@@ -95,10 +95,17 @@ export class Engine {
     this.djHP.frequency.value = 26;  // doubles as the master DC/rumble floor
     this.djHP.Q.value = 1;
 
+    // gentle "air" high shelf so the whole mix reads brighter and more open
+    this.air = ctx.createBiquadFilter();
+    this.air.type = 'highshelf';
+    this.air.frequency.value = 7000;
+    this.air.gain.value = 3;
+
     this.duck.connect(this.sum);
     this.sum.connect(this.djLP);
     this.djLP.connect(this.djHP);
-    this.djHP.connect(this.comp);
+    this.djHP.connect(this.air);
+    this.air.connect(this.comp);
     this.deckBus.connect(this.comp);   // decks skip the sequencer duck + DJ filter
     this.comp.connect(this.limiter);
     this.limiter.connect(this.clip);
@@ -141,12 +148,13 @@ export class Engine {
     const rConv = ctx.createConvolver();
     rConv.buffer = this._impulse(IS_MOBILE ? 1.4 : 2.2, 1, 2.2);
     const rHP = ctx.createBiquadFilter();
-    rHP.type = 'highpass'; rHP.frequency.value = 32;
+    rHP.type = 'highpass'; rHP.frequency.value = 30;
     const rLP = ctx.createBiquadFilter();
-    rLP.type = 'lowpass'; rLP.frequency.value = 170;
+    rLP.type = 'lowpass'; rLP.frequency.value = 190;
+    rLP.Q.value = 0.9;
     const rSat = ctx.createWaveShaper();
     rSat.curve = curve;             // reuse the tanh curve
-    const rG = ctx.createGain(); rG.gain.value = 1.5;
+    const rG = ctx.createGain(); rG.gain.value = 2.1;   // fuller rumble bed
     this.rumbleIn.connect(rConv).connect(rHP).connect(rLP).connect(rSat).connect(rG).connect(this.duck);
 
     this.updateDelayTime();
@@ -208,8 +216,8 @@ export class Engine {
     this.djHP.frequency.setTargetAtTime(hp, now, 0.05);
   }
 
-  addSample(buffer, name) {
-    this.samples.push({ buffer, name });
+  addSample(buffer, name, analysis) {
+    this.samples.push({ buffer, name, ...(analysis || {}) });
     this.activeSample = this.samples.length - 1;
     return this.activeSample;
   }
@@ -282,26 +290,28 @@ export class Engine {
       const tr = s.tracks[trk.id];
       const v = tr.steps[step];
       if (!v || tr.mute) continue;
-      const vel = v === 2 ? 1 : 0.72;
+      // per-hit velocity variation + a little timing push/pull so nothing is robotic
+      const vel = (v === 2 ? 1 : 0.72) * (0.94 + Math.random() * 0.06);
       const out = this.trackIn[trk.id];
       const p = tr.params;
       const mode = tr.mode || 0;
-      const jit = 0.9 + Math.random() * 0.2;   // hats/perc humanization
+      const jit = 0.86 + Math.random() * 0.28;                 // hats/perc velocity spread
+      const micro = (Math.random() - 0.5) * 0.005;             // ±2.5 ms humanize
       switch (trk.id) {
         case 'kick':
           this._drum('kick', t, p, vel, mode);
           this._duck(t);
           break;
         case 'snare': this._drum('snare', t, p, vel, mode); break;
-        case 'clap':  this._drum('clap', t, p, vel); break;
-        case 'nse':   this._drum('nse', t, p, vel, 0, jit); break;
+        case 'clap':  this._drum('clap', t + micro, p, vel); break;
+        case 'nse':   this._drum('nse', t + micro, p, vel, 0, jit); break;
         case 'chh':
           this._chokeOpenHats(t);
-          this._drum('chh', t, p, vel, mode, jit);
+          this._drum('chh', t + micro, p, vel, mode, jit);
           break;
         case 'ohh': {
-          this._chokeOpenHats(t);
-          const g = this._drum('ohh', t, p, vel, mode, jit);
+          this._chokeOpenHats(t + micro);
+          const g = this._drum('ohh', t + micro, p, vel, mode, jit);
           if (g) {
             this._openHats.push(g);
             if (this._openHats.length > 4) this._openHats.shift();
@@ -323,7 +333,7 @@ export class Engine {
           this._lastPluck = V.synth(ctx, out, t, p, vel, tr.notes[step], sixteenth, tr.mode || 0, 440);
           break;
         }
-        case 'stab': V.stab(ctx, out, t, p, vel); break;
+        case 'stab': V.stab(ctx, out, t, p, vel, tr.mode || 0, sixteenth); break;
         case 'smp': {
           if (!this.sample) break;
           if (this._lastSmp) this._chokeGain(this._lastSmp, t);
@@ -343,6 +353,10 @@ export class Engine {
     if (buf) {
       const src = ctx.createBufferSource();
       src.buffer = buf;
+      // analog drift: a slightly different pitch every hit so cached buffers
+      // never sound identical (tighter on the kick, looser on hats)
+      const drift = id === 'kick' ? 0.006 : id === 'snare' ? 0.012 : id === 'nse' ? 0.03 : 0.02;
+      src.playbackRate.value = 1 + (Math.random() * 2 - 1) * drift;
       const g = ctx.createGain();
       g.gain.value = jitter;
       src.connect(g).connect(out);

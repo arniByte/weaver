@@ -2,13 +2,14 @@
 
 import {
   TRACKS, STEPS, BAR, NOTE_LO, NOTE_HI, PRESET_ORDER, applyPreset, randomize,
-  serialize, saveLocal, loadInitialState,
+  serialize, saveLocal, loadInitialState, defaultState,
 } from './state.js';
 import { Engine } from './engine.js';
 import { Viz } from './viz.js';
 import { LightWall } from './lightwall.js';
 import { AutoPilot } from './autopilot.js';
 import { DeckPlayer } from './deck.js';
+import { analyzeBuffer } from './analyze.js';
 
 const state = loadInitialState();
 const engine = new Engine(state);
@@ -19,6 +20,7 @@ const wall = new LightWall(document.getElementById('wall'), engine);
 const $ = id => document.getElementById(id);
 const grid = $('grid');
 const TRACK_DEF = Object.fromEntries(TRACKS.map(t => [t.id, t]));
+const DEF = defaultState();   // default values for double-click reset
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 function noteLabel(offset, root) {
@@ -125,14 +127,14 @@ function buildGrid() {
     const sliders = [];
     sliders.push(makeSlider(ctrls, 'LVL',
       () => state.tracks[t.id].level,
-      v => { state.tracks[t.id].level = v; engine.applyMix(t.id); }));
+      v => { state.tracks[t.id].level = v; engine.applyMix(t.id); }, DEF.tracks[t.id].level));
     sliders.push(makeSlider(ctrls, 'FX',
       () => state.tracks[t.id].send,
-      v => { state.tracks[t.id].send = v; engine.applyMix(t.id); }));
+      v => { state.tracks[t.id].send = v; engine.applyMix(t.id); }, DEF.tracks[t.id].send));
     for (const [key, lab] of t.params) {
       sliders.push(makeSlider(ctrls, lab,
         () => state.tracks[t.id].params[key],
-        v => { state.tracks[t.id].params[key] = v; }));
+        v => { state.tracks[t.id].params[key] = v; }, DEF.tracks[t.id].params[key]));
     }
     row.appendChild(ctrls);
 
@@ -143,23 +145,29 @@ function buildGrid() {
 
 function div(cls) { const d = document.createElement('div'); d.className = cls; return d; }
 
-function makeSlider(parent, label, get, set) {
+function makeSlider(parent, label, get, set, def) {
   const wrap = document.createElement('label');
   wrap.className = 'sl';
+  wrap.title = 'double-click to reset';
   wrap.append(label);
   const input = document.createElement('input');
   input.type = 'range';
   input.min = 0; input.max = 1; input.step = 0.01;
   const out = document.createElement('output');
+  const sync = () => { input.value = get(); out.textContent = pct(get()); };
   input.addEventListener('input', () => {
     set(+input.value);
     out.textContent = pct(+input.value);
     dirty();
   });
+  input.addEventListener('dblclick', () => {
+    if (def === undefined) return;
+    set(def); sync(); dirty();
+  });
   wrap.appendChild(input);
   wrap.appendChild(out);
   parent.appendChild(wrap);
-  return { sync() { input.value = get(); out.textContent = pct(get()); } };
+  return { sync };
 }
 
 // ---------- cell interaction ----------
@@ -266,37 +274,43 @@ function toggleMute(id) {
 
 // ---------- header controls ----------
 
-function headerSlider(id, get, set, fmt) {
+function headerSlider(id, get, set, fmt, def) {
   const input = $(id);
   const out = $(id + '-v');
+  input.title = 'double-click to reset';
+  const sync = () => { input.value = get(); out.textContent = fmt(get()); };
   input.addEventListener('input', () => {
     set(+input.value);
     out.textContent = fmt(+input.value);
     dirty();
   });
-  return { input, sync() { input.value = get(); out.textContent = fmt(get()); } };
+  input.addEventListener('dblclick', () => {
+    if (def === undefined) return;
+    set(def); sync(); dirty();
+  });
+  return { input, sync };
 }
 
 header.bpm = headerSlider('bpm',
   () => state.bpm,
   v => { state.bpm = Math.round(v); engine.updateDelayTime(); },
-  v => String(Math.round(v)));
+  v => String(Math.round(v)), DEF.bpm);
 header.swing = headerSlider('swing',
   () => state.swing,
   v => { state.swing = Math.round(v); },
-  v => String(Math.round(v)));
+  v => String(Math.round(v)), DEF.swing);
 header.filter = headerSlider('filter',
   () => state.filter,
   v => { state.filter = Math.abs(v) < 0.04 ? 0 : v; engine.setFilter(state.filter); },
-  v => v < -0.04 ? 'LP' + pct(-v) : v > 0.04 ? 'HP' + pct(v) : '——');
+  v => v < -0.04 ? 'LP' + pct(-v) : v > 0.04 ? 'HP' + pct(v) : '——', 0);
 header.pump = headerSlider('pump',
   () => state.pump,
   v => { state.pump = v; },
-  pct);
+  pct, DEF.pump);
 header.master = headerSlider('master',
   () => state.master,
   v => { state.master = v; engine.setMaster(v); },
-  pct);
+  pct, DEF.master);
 
 $('filter').addEventListener('dblclick', () => {
   state.filter = 0;
@@ -434,8 +448,9 @@ function renderPool() {
     play.addEventListener('click', () => { deck.playFull(i); renderPool(); renderTrack('smp'); });
     const b = document.createElement('button');
     b.className = 'chip' + (i === engine.activeSample ? ' active' : '');
-    b.textContent = `${String(i + 1).padStart(2, '0')} ${s.name}`;
-    b.title = 'use this sample on the SP sequencer track';
+    const bpm = s.bpm ? `<span class="bpm">${Math.round(s.bpm)}</span>` : '';
+    b.innerHTML = `${String(i + 1).padStart(2, '0')} ${s.name}${bpm}`;
+    b.title = 'use this sample on the SP sequencer track' + (s.bpm ? ` · detected ${Math.round(s.bpm)} BPM` : '');
     b.addEventListener('click', () => { engine.activeSample = i; renderPool(); renderTrack('smp'); });
     wrap.append(play, b);
     poolBox.appendChild(wrap);
@@ -463,17 +478,17 @@ function fmtTime(sec) {
 function renderDecks() {
   const info = deck.info();
   $('automix').classList.toggle('active', info.automix);
-  $('xfade').textContent = 'XFD ' + info.xfade + 'S';
+  $('xfade').textContent = 'XFD ' + info.xfadeBars + 'BR';
   info.decks.forEach((d, i) => {
     const e = deckEls[i];
     e.root.classList.toggle('live', d.playing);
-    e.name.textContent = d.name || '—';
+    e.name.textContent = d.name ? (d.bpm ? `${d.name}  ${d.bpm}` : d.name) : '—';
     e.bar.style.width = (d.dur ? (d.pos / d.dur) * 100 : 0) + '%';
     e.time.textContent = d.dur ? fmtTime(d.pos) : '0:00';
   });
   if (!engine.samples.length) $('deckstat').textContent = 'LOAD TRACKS ABOVE';
-  else if (info.automix) $('deckstat').textContent = 'AUTO-MIXING POOL';
-  else $('deckstat').textContent = '';
+  else if (info.automix) $('deckstat').textContent = `AUTO-MIXING @ ${info.tempo} BPM`;
+  else $('deckstat').textContent = 'BEATMATCHED TO BPM SLIDER';
 }
 
 $('automix').addEventListener('click', () => {
@@ -490,7 +505,9 @@ async function loadSampleFiles(files) {
     try {
       const raw = await file.arrayBuffer();
       const buf = await engine.ctx.decodeAudioData(raw);
-      engine.addSample(buf, file.name.toUpperCase().slice(0, 22));
+      let analysis = {};
+      try { analysis = analyzeBuffer(buf); } catch { /* analysis is best-effort */ }
+      engine.addSample(buf, file.name.toUpperCase().slice(0, 22), analysis);
     } catch { /* undecodable file — skip */ }
   }
   renderPool();
